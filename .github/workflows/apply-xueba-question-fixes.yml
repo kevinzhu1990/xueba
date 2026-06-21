@@ -1,0 +1,85 @@
+name: Apply Xueba question fixes
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-xueba-question-fixes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index.html
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'index.html';
+          let s = fs.readFileSync(path, 'utf8');
+          const replace = (from, to) => {
+            if (!s.includes(from)) throw new Error('Missing expected text: ' + from.slice(0, 120));
+            s = s.replace(from, to);
+          };
+
+          replace('["rabbit","兔","🐰"]', '["rabbit","兔子","🐰"]');
+          replace('["猴子","用肺","爬","树上","四条腿","有尾巴"]', '["猴子","用肺","爬","树上","四肢","有尾巴"]');
+          replace('["袋鼠","用肺","跳","草原","两条腿","有育儿袋"]', '["袋鼠","用肺","跳","草原","两条后腿","有育儿袋"]');
+          replace('push(`${a[0]}有几条腿？`, a[4], rot(legs.filter(x=>x!==a[4]),i+3));',
+`const legQ = a[0]==="猴子"
+      ? "猴子有几条肢体？"
+      : a[0]==="袋鼠"
+        ? "袋鼠主要用哪几条腿跳跃？"
+        : \`${a[0]}有几条腿？\`;
+    push(legQ, a[4], rot(legs.filter(x=>x!==a[4]),i+3));`);
+
+          replace('{q:"鲸鱼浮出水面时头顶会喷出高高的？",a:"水柱",w:["火","烟","泡泡糖"],lv:2}',
+                  '{q:"鲸鱼浮出水面呼气时，会看到像水柱一样的？",a:"雾气",w:["水花","火焰","泡泡糖"],lv:2}');
+          replace('{q:"冰激凌冒出的白色冷气，常来自哪种东西？",a:"干冰",w:["普通冰块","盐","糖"],lv:2}',
+                  '{q:"舞台烟雾或冷链保温中常用的白色冷气，常来自哪种东西？",a:"干冰",w:["普通冰块","盐","糖"],lv:2}');
+          replace('{q:"妈妈的银饰戴久了变黑，是银发生了什么？",a:"氧化",w:["融化","蒸发","结冰"],lv:3}',
+                  '{q:"妈妈的银饰戴久了变黑，主要是银发生了什么反应？",a:"硫化",w:["融化","蒸发","结冰"],lv:3}');
+          replace('{q:"二氧化碳比空气重，所以可以用来做什么？",a:"灭火",w:["吹气球升空","点火","保鲜"],lv:3}',
+                  '{q:"二氧化碳不支持燃烧，常用来做什么？",a:"灭火",w:["吹气球升空","点火","助燃"],lv:3}');
+          replace('{q:"水在标准情况下沸腾的温度是？",a:"100摄氏度",w:["0摄氏度","50摄氏度","37摄氏度"],lv:3}',
+                  '{q:"水在标准大气压下沸腾的温度是？",a:"100摄氏度",w:["0摄氏度","50摄氏度","37摄氏度"],lv:3}');
+          replace('{q:"水结冰的温度是？",a:"0摄氏度",w:["100摄氏度","10摄氏度","37摄氏度"],lv:3}',
+                  '{q:"水在标准大气压下结冰的温度是？",a:"0摄氏度",w:["100摄氏度","10摄氏度","37摄氏度"],lv:3}');
+
+          const validator = `
+function validateQuestionBank(){
+  const warnings = [];
+  Object.keys(DATA).forEach(subject=>{
+    const seen = new Set();
+    (DATA[subject].questions||[]).forEach((q, idx)=>{
+      const tag = subject + " #" + idx + " " + (q.q||"");
+      if(!q.q) warnings.push(tag + " 缺少题干");
+      if(!Array.isArray(q.o) || q.o.length < 2) warnings.push(tag + " 选项不足");
+      if(!Number.isInteger(q.a) || !q.o || q.a < 0 || q.a >= q.o.length) warnings.push(tag + " 答案索引越界");
+      if(q.o){
+        const unique = new Set(q.o.map(x=>String(x)));
+        if(unique.size !== q.o.length) warnings.push(tag + " 存在重复选项");
+        if(q.o.some(x=>String(x).trim()==="")) warnings.push(tag + " 存在空选项");
+      }
+      if(seen.has(q.q)) warnings.push(tag + " 题干重复");
+      seen.add(q.q);
+    });
+  });
+  window.XUEBA_QUESTION_WARNINGS = warnings;
+  if(warnings.length) console.warn("[小学霸题库自检]", warnings);
+}
+`;
+          replace('/* ============== 启动 ============== */\nbuildAll();', validator + '\n/* ============== 启动 ============== */\nbuildAll();\nvalidateQuestionBank();');
+
+          fs.writeFileSync(path, s);
+          NODE
+      - name: Commit patched site and remove temporary workflow
+        run: |
+          git config user.name "codex-fix-bot"
+          git config user.email "codex-fix-bot@users.noreply.github.com"
+          git rm .github/workflows/apply-xueba-question-fixes.yml
+          git add index.html
+          git commit -m "fix: correct xueba question wording"
+          git push
