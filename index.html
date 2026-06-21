@@ -1271,6 +1271,9 @@ function genCards(){
 const BASE_SAVE_KEY = "xueba_save_v1";
 const PROFILE_KEY = "xueba_active_profile_v1";
 const FAMILY_CODE = "xueba2026";
+const CLOUD_API = "";
+let cloudTimer = null;
+let cloudState = "local";
 let activeProfile = loadProfile();
 let SAVE_KEY = profileSaveKey(activeProfile);
 let store = load();
@@ -1288,17 +1291,26 @@ function load(){
   try{ return normalizeStore(JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); }
   catch(e){ return normalizeStore({}); }
 }
-function save(){ localStorage.setItem(SAVE_KEY, JSON.stringify(store)); }
-function login(){
+function save(options={}){
+  store.updatedAt = new Date().toISOString();
+  localStorage.setItem(SAVE_KEY, JSON.stringify(store));
+  if(!options.skipCloud) scheduleCloudSave();
+}
+function saveLocalOnly(){
+  localStorage.setItem(SAVE_KEY, JSON.stringify(store));
+}
+async function login(){
   const name = document.getElementById("loginName").value.trim();
   const code = document.getElementById("loginCode").value.trim();
   const err = document.getElementById("loginError");
   if(!name){ err.textContent = "先输入一个昵称哦"; return; }
   if(code !== FAMILY_CODE){ err.textContent = "家庭码不对，再试一次"; return; }
+  err.textContent = "正在读取学习记录...";
   activeProfile = {name, id:profileId(name)};
   localStorage.setItem(PROFILE_KEY, JSON.stringify(activeProfile));
   SAVE_KEY = profileSaveKey(activeProfile);
   store = load();
+  await syncFromCloud();
   initApp();
 }
 function logout(){
@@ -1320,8 +1332,67 @@ function normalizeStore(s){
   s.days = s.days || {};
   s.streak = Number(s.streak)||0;
   s.lastStudy = s.lastStudy || "";
+  s.updatedAt = s.updatedAt || "";
   s.sound = (s.sound===undefined)? true : !!s.sound;   // 声音总开关，默认开
   return s;
+}
+
+function cloudEnabled(){
+  return !!(CLOUD_API && activeProfile && activeProfile.id);
+}
+function cloudLabel(){
+  if(!CLOUD_API) return "本机保存";
+  return cloudState==="synced" ? "云端已同步" : cloudState==="syncing" ? "云端同步中" : "本机保存";
+}
+function scheduleCloudSave(){
+  if(!cloudEnabled()) return;
+  clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(()=>syncToCloud(), 700);
+}
+async function syncFromCloud(){
+  if(!cloudEnabled()) return;
+  cloudState = "syncing";
+  try{
+    const url = `${CLOUD_API.replace(/\/$/,"")}/api/progress?family=${encodeURIComponent(FAMILY_CODE)}&profile=${encodeURIComponent(activeProfile.id)}`;
+    const res = await fetch(url, {cache:"no-store"});
+    if(res.ok){
+      const data = await res.json();
+      if(data && data.store){
+        const remote = normalizeStore(data.store);
+        const remoteTime = Date.parse(remote.updatedAt || 0);
+        const localTime = Date.parse(store.updatedAt || 0);
+        if(remoteTime > localTime){
+          store = remote;
+          saveLocalOnly();
+        } else if(localTime > remoteTime){
+          await syncToCloud(true);
+        }
+      }
+      cloudState = "synced";
+    } else if(res.status===404){
+      await syncToCloud(true);
+    } else {
+      cloudState = "local";
+    }
+  }catch(e){
+    cloudState = "local";
+  }
+}
+async function syncToCloud(force=false){
+  if(!cloudEnabled()) return;
+  if(!force && cloudState==="syncing") return;
+  cloudState = "syncing";
+  try{
+    const res = await fetch(`${CLOUD_API.replace(/\/$/,"")}/api/progress`, {
+      method:"PUT",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({familyCode:FAMILY_CODE, profile:activeProfile, store})
+    });
+    cloudState = res.ok ? "synced" : "local";
+  }catch(e){
+    cloudState = "local";
+  }
+  if(document.getElementById("home")?.classList.contains("active")) renderHome();
 }
 
 /* ============== 声音：朗读开关 + 答题音效（无需音频文件） ============== */
@@ -1610,7 +1681,7 @@ function renderParent(){
     : "还没有练习记录。先让孩子每天完成 10 题，系统会慢慢看出薄弱科目。";
   document.getElementById("parentCard").innerHTML = `
     <div class="mode-title">家长查看</div>
-    <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · 数据保存在这台设备的浏览器里</div>
+    <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · ${cloudLabel()}</div>
     <div class="parent-summary">
       <div class="parent-box"><b>${totalAttempts}</b><span>总答题</span></div>
       <div class="parent-box"><b>${avgRate}%</b><span>总正确率</span></div>
