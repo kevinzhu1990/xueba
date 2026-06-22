@@ -1434,24 +1434,39 @@ async function pushChildren(parentUid){
   try{ await fetch(api('/api/children'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({children:localChildren(parentUid)})}); cloudState='synced'; }
   catch(e){ cloudState='local'; }
 }
+function mergeChildren(localList, remoteList){
+  const map = new Map();
+  (remoteList||[]).forEach(c=>map.set(c.id,c));
+  (localList||[]).forEach(c=>map.set(c.id,{...map.get(c.id),...c}));
+  return [...map.values()].sort((a,b)=>String(a.createdAt||"").localeCompare(String(b.createdAt||"")));
+}
 async function createChildProfile(parentUid, childData){
   const now=new Date().toISOString();
   const child={id:childData.id||(`child_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`),name:childData.name,grade:childData.grade===''?null:Number(childData.grade),avatar:childData.avatar||AVATARS[0],stars:0,createdAt:now,updatedAt:now,lastStudyAt:''};
   const list=localChildren(parentUid).filter(c=>c.id!==child.id); list.push(child); saveLocalChildren(parentUid,list);
-  await pushChildren(parentUid);
+  cloudState='syncing';
+  pushChildren(parentUid).then(()=>renderChildScreen()).catch(()=>{ cloudState='local'; });
   return child;
 }
 async function updateChildProfile(parentUid, childId, data){
   const patch={...data,updatedAt:new Date().toISOString()};
   const list=localChildren(parentUid).map(c=>c.id===childId?{...c,...patch}:c); saveLocalChildren(parentUid,list);
-  await pushChildren(parentUid);
+  pushChildren(parentUid);
 }
 async function getChildren(parentUid){
   let list=localChildren(parentUid);
   if(cloudOn()){
     try{
       const res=await fetch(api('/api/children'),{headers:authHeaders(),cache:'no-store'});
-      if(res.ok){ const d=await res.json(); if(Array.isArray(d.children)){ list=d.children; saveLocalChildren(parentUid,list); } cloudState='synced'; }
+      if(res.ok){
+        const d=await res.json();
+        if(Array.isArray(d.children)){
+          list=mergeChildren(list,d.children);
+          saveLocalChildren(parentUid,list);
+          if(list.length && d.children.length < list.length) pushChildren(parentUid);
+        }
+        cloudState='synced';
+      }
     }catch(e){ cloudState='local'; }
   }
   childrenCache=list; return list;
