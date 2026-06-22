@@ -1331,16 +1331,11 @@ const LOCAL_CHILDREN_KEY = "xueba_local_children_v1";
 const FAMILY_CODE = "xueba2026";
 const AVATARS = ["🧒","👧","👦","🐣","🌟","🚀","🦄","🐼"];
 
-// 填入 Firebase Web config 后自动启用 Firebase Auth + Firestore。
-// 不要在这里放私钥；Web config 可以公开，安全边界依赖 Firestore Rules。
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyAulKgoywbcFLNBac_zY1JSxpSEIYC_BIw",
-  authDomain: "xueba-35bce.firebaseapp.com",
-  projectId: "xueba-35bce",
-  storageBucket: "xueba-35bce.firebasestorage.app",
-  messagingSenderId: "447625345495",
-  appId: "1:447625345495:web:32d437f545049dc47a3392"
-};
+// 云端后端：阿里云函数计算（国内可访问）。家长账号、孩子档案、学习进度都存这里。
+const CLOUD_API = "https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run";
+function api(p){ return CLOUD_API.replace(/\/$/,'') + p; }
+function authHeaders(){ const h={'Content-Type':'application/json'}; if(currentParent&&currentParent.token) h['Authorization']='Bearer '+currentParent.token; return h; }
+function cloudOn(){ return !!(CLOUD_API && currentParent && currentParent.token); }
 
 let cloudTimer = null;
 let cloudState = "local";
@@ -1354,28 +1349,8 @@ let activeProfile = loadProfile();
 let SAVE_KEY = profileSaveKey(activeProfile);
 let store = load();
 
-function firebaseConfigured(){ return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && FIREBASE_CONFIG.authDomain); }
-function loadScript(src){
-  return new Promise((resolve,reject)=>{
-    if([...document.scripts].some(s=>s.src===src)){ resolve(); return; }
-    const sc=document.createElement('script'); sc.src=src; sc.onload=resolve; sc.onerror=reject; document.head.appendChild(sc);
-  });
-}
-async function initAuth(){
-  if(firebaseInitPromise) return firebaseInitPromise;
-  firebaseInitPromise = (async()=>{
-    if(!firebaseConfigured()) { firebaseReady=false; return false; }
-    try{
-      await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js');
-      await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js');
-      await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js');
-      if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-      firebaseReady = true;
-      return true;
-    }catch(e){ firebaseReady=false; cloudState="local"; return false; }
-  })();
-  return firebaseInitPromise;
-}
+function firebaseConfigured(){ return !!CLOUD_API; }
+async function initAuth(){ firebaseReady = !!CLOUD_API; return firebaseReady; }
 function getCurrentUser(){ return currentParent; }
 function onAuthStateChangedHandler(callback){ callback(currentParent); }
 
@@ -1388,37 +1363,38 @@ function saveParentSession(parent){ parent ? localStorage.setItem(PARENT_SESSION
 
 async function registerParent(email, password, displayName){
   email=String(email||'').trim().toLowerCase(); displayName=String(displayName||'家长').trim()||'家长';
-  if(!email || !password || password.length<6) throw new Error('请输入邮箱和至少 6 位密码');
-  await initAuth();
-  if(firebaseReady){
-    const cred = await firebase.auth().createUserWithEmailAndPassword(email,password);
-    await cred.user.updateProfile({displayName});
-    const parent={uid:cred.user.uid,email,displayName,familyCode:FAMILY_CODE,role:'parent'};
-    await firebase.firestore().collection('users').doc(parent.uid).set({...parent,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()},{merge:true});
-    currentParent=parent; saveParentSession(parent); cloudState='synced'; return parent;
+  if(!email || !password || password.length<6) throw new Error('请输入账号和至少 6 位密码');
+  if(CLOUD_API){
+    let res, data;
+    try{ res=await fetch(api('/api/register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:email,password,displayName})}); data=await res.json().catch(()=>({})); }
+    catch(e){ throw new Error('连不上服务器，请检查网络后重试'); }
+    if(!res.ok) throw new Error(data.error||'注册失败');
+    const parent={uid:email,email,displayName:data.displayName||displayName,token:data.token,role:'parent'};
+    currentParent=parent; saveParentSession(parent); firebaseReady=true; cloudState='synced'; return parent;
   }
   const accounts=localParentAccounts();
-  if(accounts[email]) throw new Error('这个邮箱已注册，请直接登录');
-  const parent={uid:parentUidFromEmail(email),email,displayName,familyCode:FAMILY_CODE,role:'parent',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  if(accounts[email]) throw new Error('这个账号已注册，请直接登录');
+  const parent={uid:parentUidFromEmail(email),email,displayName,role:'parent',createdAt:new Date().toISOString()};
   accounts[email]={...parent,passwordToken:localPasswordToken(password)}; saveLocalParentAccounts(accounts);
   currentParent=parent; saveParentSession(parent); return parent;
 }
 async function loginParent(email, password){
   email=String(email||'').trim().toLowerCase();
-  if(!email || !password) throw new Error('请输入邮箱和密码');
-  await initAuth();
-  if(firebaseReady){
-    const cred = await firebase.auth().signInWithEmailAndPassword(email,password);
-    const parent={uid:cred.user.uid,email:cred.user.email,displayName:cred.user.displayName||'家长',familyCode:FAMILY_CODE,role:'parent'};
-    currentParent=parent; saveParentSession(parent); cloudState='synced'; return parent;
+  if(!email || !password) throw new Error('请输入账号和密码');
+  if(CLOUD_API){
+    let res, data;
+    try{ res=await fetch(api('/api/login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:email,password})}); data=await res.json().catch(()=>({})); }
+    catch(e){ throw new Error('连不上服务器，请检查网络后重试'); }
+    if(!res.ok) throw new Error(data.error||'登录失败');
+    const parent={uid:email,email,displayName:data.displayName||'家长',token:data.token,role:'parent'};
+    currentParent=parent; saveParentSession(parent); firebaseReady=true; cloudState='synced'; return parent;
   }
   const acc=localParentAccounts()[email];
-  if(!acc || acc.passwordToken!==localPasswordToken(password)) throw new Error('邮箱或密码不正确');
+  if(!acc || acc.passwordToken!==localPasswordToken(password)) throw new Error('账号或密码不正确');
   const {passwordToken, ...parent}=acc;
   currentParent=parent; saveParentSession(parent); return parent;
 }
 async function logoutParent(){
-  if(firebaseReady) try{ await firebase.auth().signOut(); }catch(e){}
   currentParent=null; currentChild=null; activeProfile=null; saveParentSession(null); localStorage.removeItem(PROFILE_KEY);
   SAVE_KEY=profileSaveKey(null); store=load(); go('authScreen');
 }
@@ -1445,34 +1421,37 @@ function normalizeStore(s){
   s.sound = (s.sound===undefined)? true : !!s.sound; s.grade = (s.grade===undefined)? null : s.grade;
   s.recent = Array.isArray(s.recent)? s.recent : []; s.tagstats = s.tagstats || {}; return s;
 }
-function cloudEnabled(){ return !!(firebaseReady && currentParent && currentChild); }
-function cloudLabel(){ if(!firebaseConfigured()) return '本机保存'; if(!firebaseReady) return '本机保存'; return cloudState==='synced'?'云端已同步':cloudState==='syncing'?'云端同步中':'本机缓存'; }
+function cloudEnabled(){ return !!(cloudOn() && currentChild); }
+function cloudLabel(){ if(!CLOUD_API || !currentParent) return '📱 本机保存'; return cloudState==='synced'?'☁️ 云端已同步':cloudState==='syncing'?'☁️ 同步中…':'📱 本机缓存'; }
 function scheduleCloudSave(){ if(!currentChild) return; clearTimeout(cloudTimer); cloudTimer=setTimeout(()=>syncToCloud(),700); }
 
 function localChildrenMap(){ try{return JSON.parse(localStorage.getItem(LOCAL_CHILDREN_KEY)||'{}');}catch(e){return{};} }
 function saveLocalChildrenMap(map){ localStorage.setItem(LOCAL_CHILDREN_KEY, JSON.stringify(map)); }
 function localChildren(parentUid){ const map=localChildrenMap(); return map[parentUid]||[]; }
 function saveLocalChildren(parentUid, children){ const map=localChildrenMap(); map[parentUid]=children; saveLocalChildrenMap(map); }
+async function pushChildren(parentUid){
+  if(!cloudOn()) return;
+  try{ await fetch(api('/api/children'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({children:localChildren(parentUid)})}); cloudState='synced'; }
+  catch(e){ cloudState='local'; }
+}
 async function createChildProfile(parentUid, childData){
   const now=new Date().toISOString();
   const child={id:childData.id||(`child_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`),name:childData.name,grade:childData.grade===''?null:Number(childData.grade),avatar:childData.avatar||AVATARS[0],stars:0,createdAt:now,updatedAt:now,lastStudyAt:''};
-  if(firebaseReady && parentUid && !parentUid.startsWith('local_')){
-    await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(child.id).set(child,{merge:true});
-  }
   const list=localChildren(parentUid).filter(c=>c.id!==child.id); list.push(child); saveLocalChildren(parentUid,list);
+  await pushChildren(parentUid);
   return child;
 }
 async function updateChildProfile(parentUid, childId, data){
   const patch={...data,updatedAt:new Date().toISOString()};
-  if(firebaseReady && parentUid && !parentUid.startsWith('local_')) await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).set(patch,{merge:true});
   const list=localChildren(parentUid).map(c=>c.id===childId?{...c,...patch}:c); saveLocalChildren(parentUid,list);
+  await pushChildren(parentUid);
 }
 async function getChildren(parentUid){
   let list=localChildren(parentUid);
-  if(firebaseReady && parentUid && !parentUid.startsWith('local_')){
+  if(cloudOn()){
     try{
-      const snap=await firebase.firestore().collection('users').doc(parentUid).collection('children').orderBy('createdAt').get();
-      list=snap.docs.map(d=>({id:d.id,...d.data()})); saveLocalChildren(parentUid,list); cloudState='synced';
+      const res=await fetch(api('/api/children'),{headers:authHeaders(),cache:'no-store'});
+      if(res.ok){ const d=await res.json(); if(Array.isArray(d.children)){ list=d.children; saveLocalChildren(parentUid,list); } cloudState='synced'; }
     }catch(e){ cloudState='local'; }
   }
   childrenCache=list; return list;
@@ -1510,12 +1489,15 @@ async function syncFromCloud(){
   if(!cloudEnabled()) return;
   cloudState='syncing';
   try{
-    const doc=await firebase.firestore().collection('users').doc(currentParent.uid).collection('children').doc(currentChild.id).get();
-    const data=doc.exists?doc.data():{}; const remote=normalizeStore(data.progressStore||{});
-    const remoteTime=Date.parse(remote.updatedAt||0), localTime=Date.parse(store.updatedAt||0);
-    if(remoteTime>localTime){ store=remote; saveLocalOnly(); }
-    else if(localTime>remoteTime){ await syncToCloud(true); }
-    cloudState='synced';
+    const res=await fetch(api('/api/progress?child='+encodeURIComponent(currentChild.id)),{headers:authHeaders(),cache:'no-store'});
+    if(res.ok){
+      const d=await res.json(); const remote=normalizeStore(d.store||{});
+      const remoteTime=Date.parse(remote.updatedAt||0), localTime=Date.parse(store.updatedAt||0);
+      if(remoteTime>localTime){ store=remote; saveLocalOnly(); }
+      else if(localTime>remoteTime){ await syncToCloud(true); }
+      cloudState='synced';
+    } else if(res.status===404){ await syncToCloud(true); }
+    else { cloudState='local'; }
   }catch(e){ cloudState='local'; }
 }
 async function syncToCloud(force=false){
@@ -1523,27 +1505,22 @@ async function syncToCloud(force=false){
   if(!force && cloudState==='syncing') return;
   cloudState='syncing';
   try{
-    await firebase.firestore().collection('users').doc(currentParent.uid).collection('children').doc(currentChild.id).set({
-      name:currentChild.name, grade:store.grade, avatar:currentChild.avatar, stars:store.stars, updatedAt:new Date().toISOString(), lastStudyAt:store.lastStudy, progressStore:store
-    },{merge:true});
-    cloudState='synced';
+    const res=await fetch(api('/api/progress'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({childId:currentChild.id, store})});
+    cloudState=res.ok?'synced':'local';
   }catch(e){ cloudState='local'; }
   if(document.getElementById('home')?.classList.contains('active')) renderHome();
 }
 
 async function saveAnswerRecord(parentUid, childId, record){
   store.answerRecords = store.answerRecords || []; store.answerRecords.push(record); if(store.answerRecords.length>500) store.answerRecords=store.answerRecords.slice(-500);
-  if(cloudEnabled()) try{ await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).collection('answerRecords').doc(record.id).set(record); }catch(e){ cloudState='local'; }
+  // 记录都在 store 里，随 syncToCloud 一起上云，无需单独写
 }
-async function saveWrongQuestion(parentUid, childId, wrongQuestion){
-  if(cloudEnabled()) try{ await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).collection('wrongQuestions').doc(wrongQuestion.questionId).set(wrongQuestion,{merge:true}); }catch(e){ cloudState='local'; }
-}
+async function saveWrongQuestion(parentUid, childId, wrongQuestion){ /* 错题在 store.wrong 里，随进度同步 */ }
 async function updateDailyStats(parentUid, childId, answerRecord){
   const key=answerRecord.date; const d=store.dailyStats[key]||{date:key,total:0,correct:0,accuracy:0,studyMinutes:0,starsEarned:0,subjects:{},weakTags:[],updatedAt:''};
   d.total++; if(answerRecord.isCorrect) d.correct++; d.accuracy=Math.round(d.correct/d.total*100); d.starsEarned += answerRecord.isCorrect?1:0;
   d.subjects[answerRecord.subject]=d.subjects[answerRecord.subject]||{total:0,correct:0}; d.subjects[answerRecord.subject].total++; if(answerRecord.isCorrect) d.subjects[answerRecord.subject].correct++;
   d.weakTags=getWeakTags(1).slice(0,5).map(x=>x.tag); d.updatedAt=new Date().toISOString(); store.dailyStats[key]=d;
-  if(cloudEnabled()) try{ await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).collection('dailyStats').doc(key.replaceAll('-','')).set(d,{merge:true}); }catch(e){ cloudState='local'; }
 }
 function getChildStats(){ return getParentReport(); }
 function getWrongQuestions(){ return Object.keys(DATA).flatMap(subject=>(store.wrong[subject]||[]).map(i=>({subject,i,q:DATA[subject].questions[i]})).filter(x=>x.q)); }
