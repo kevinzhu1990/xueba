@@ -217,6 +217,7 @@
       <div class="star-box">⭐ <span id="totalStars">0</span></div>
     </div>
     <div class="habit-panel" id="habitPanel"></div>
+    <div class="habit-panel" id="gradePanel"></div>
     <div class="grid" id="subjectGrid"></div>
     <div class="footer-note">
       👆 选一个学科开始吧！<br>
@@ -390,9 +391,9 @@ const DATA = {
     ]
   },
   biology: {
-    name:"生物", emoji:"🐢", desc:"动物和植物", color:"#56ccf2",
+    name:"动物植物", emoji:"🐢", desc:"动物和植物", color:"#56ccf2",
     cards:[
-      {word:"鱼", say:"水里游", mean:"🐟 鱼用鳃呼吸，生活在水里，不能离开水。"},
+      {word:"鱼", say:"水里游", mean:"🐟 鱼通常用鳃从水里获得氧气，多数鱼离开水不能长时间生存。"},
       {word:"鸟", say:"天上飞", mean:"🐦 鸟有翅膀和羽毛，会飞，会下蛋。"},
       {word:"植物", say:"会长大", mean:"🌱 植物需要阳光、水和空气才能长大。"},
       {word:"蜜蜂", say:"采花蜜", mean:"🐝 蜜蜂采花蜜，还能帮花朵传播花粉。"},
@@ -431,7 +432,7 @@ const DATA = {
     ]
   },
   physics: {
-    name:"物理", emoji:"🧲", desc:"力、光和声音", color:"#ff6b6b",
+    name:"力和光", emoji:"🧲", desc:"力、光、声音和磁铁", color:"#ff6b6b",
     cards:[
       {word:"地球的吸引力", say:"往下掉", mean:"🍎 东西放手会往下掉，是因为地球在拉它。"},
       {word:"磁铁", say:"吸铁的", mean:"🧲 磁铁能吸住铁做的东西，比如回形针。"},
@@ -451,7 +452,7 @@ const DATA = {
     ]
   },
   math: {
-    name:"奥数", emoji:"🧮", desc:"找规律、动脑筋", color:"#7b8cff",
+    name:"数学", emoji:"🧮", desc:"算一算、找规律、动脑筋", color:"#7b8cff",
     cards:[
       {word:"找规律", say:"小窍门", mean:"🔢 看看数字是怎么变的：\n1,3,5,7… 每次多2\n下一个就是 9"},
       {word:"数图形", say:"别数漏", mean:"🔺 数三角形、正方形时，\n要按顺序数，大的小的都别忘。"},
@@ -1358,6 +1359,9 @@ function normalizeStore(s){
   s.lastStudy = s.lastStudy || "";
   s.updatedAt = s.updatedAt || "";
   s.sound = (s.sound===undefined)? true : !!s.sound;   // 声音总开关，默认开
+  s.grade = (s.grade===undefined)? null : s.grade;     // 孩子年级 0-6；null=不限
+  s.recent = Array.isArray(s.recent)? s.recent : [];   // 最近若干题作答记录（自适应难度用）
+  s.tagstats = s.tagstats || {};                       // 按知识点统计 {tag:{attempts,correct}}
   return s;
 }
 
@@ -1528,6 +1532,8 @@ function masteredCount(subject){
 function unmasteredItems(subject, lv){
   let items = DATA[subject].questions.map((q,i)=>({i,q}));
   if(lv && lv!=='all') items = items.filter(x=>(x.q.lv||1)===lv);
+  const win = gradeWindow();                       // 按孩子年级筛掉超纲题
+  if(win) items = items.filter(x=>gradeMatch(x.q, win));
   return items.filter(x=>!isMastered(subject, x.i));
 }
 function recordQuestionResult(subject, idx, isCorrect){
@@ -1549,10 +1555,10 @@ let lastCfg={lv:'all', count:10};
 
 /* 难度与题量配置 */
 const LV_META=[
-  {key:'all', label:'🌈 全部', sub:'混合练习'},
-  {key:1, label:'⭐ 简单', sub:'1-2年级'},
-  {key:2, label:'⭐⭐ 中等', sub:'3-4年级'},
-  {key:3, label:'⭐⭐⭐ 较难', sub:'5-6年级'},
+  {key:'all', label:'🌈 全部', sub:'综合练习'},
+  {key:1, label:'⭐ 基础', sub:'打好基础'},
+  {key:2, label:'⭐⭐ 提高', sub:'稳步进阶'},
+  {key:3, label:'⭐⭐⭐ 挑战', sub:'拓展拔高'},
 ];
 const COUNT_OPTS=[10,30,50,100,'custom'];
 let setupLv='all', setupCount=10, setupCustom=20;
@@ -1634,6 +1640,7 @@ function renderHome(){
   const pb=document.getElementById("profileBtn"); if(pb) pb.textContent = activeProfile? `👤 ${activeProfile.name}` : "未登录";
   const sb=document.getElementById("soundBtn"); if(sb) sb.textContent = store.sound? "🔊":"🔇";
   renderHabitPanel();
+  renderGradePanel();
   const grid = document.getElementById("subjectGrid");
   grid.innerHTML = "";
   for(const key in DATA){
@@ -1652,6 +1659,24 @@ function renderHome(){
     grid.appendChild(div);
   }
 }
+
+function renderGradePanel(){
+  const cur = store.grade;
+  const chip = (g, label)=>{
+    const sel = (g===null)? cur==null : cur===g;
+    return `<div class="chip${sel?' sel':''}" style="padding:8px 12px;font-size:14px" onclick="setGrade(${g===null?'null':g})">${label}</div>`;
+  };
+  const chips = chip(null,"不限") + GRADES.map(gr=>chip(gr.g, gr.label)).join("");
+  const rec = getRecommendedLevel();
+  const tip = (cur==null)
+    ? "未选择年级时，显示全部难度的题目。选择年级后，会自动只出适合的题，低年级不会刷到超纲题。"
+    : `已按「${gradeLabel(cur)}」筛选合适的题目。${rec.rate!=null? rec.text : ""}`;
+  document.getElementById("gradePanel").innerHTML =
+    `<div class="habit-title">孩子年级</div>
+     <div class="chips" style="gap:8px">${chips}</div>
+     <div class="habit-tip">${tip}</div>`;
+}
+function setGrade(g){ store.grade = g; save(); renderHome(); }
 
 function renderHabitPanel(){
   const today = store.days[todayKey()] || {attempts:0, correct:0};
@@ -1681,29 +1706,12 @@ function parentBack(){
   go(activeProfile? "home" : "authScreen");
 }
 function renderParent(){
-  const stats = allSubjectStats();
-  const totalAttempts = stats.reduce((sum,s)=>sum+s.attempts,0);
-  const totalCorrect = stats.reduce((sum,s)=>sum+s.correct,0);
-  const avgRate = totalAttempts ? Math.round(totalCorrect/totalAttempts*100) : 0;
+  const report = getParentReport();
+  const stats = report.stats;
+  const totalAttempts = report.totalAttempts;
+  const avgRate = report.avgRate;
   const learned = stats.reduce((sum,s)=>sum+s.learned,0);
   const wrong = stats.reduce((sum,s)=>sum+s.wrong,0);
-  const practiced = stats.filter(s=>s.attempts>0);
-  const weak = practiced
-    .slice()
-    .sort((a,b)=>(b.wrong-a.wrong) || ((a.rate??101)-(b.rate??101)) || (b.attempts-a.attempts))
-    .slice(0,3);
-  const weakQuestions = [];
-  for(const key in DATA){
-    const qstats = store.qstats[key] || {};
-    for(const idx in qstats){
-      const st = qstats[idx];
-      const q = DATA[key].questions[Number(idx)];
-      if(q && st.wrongs>0 && !st.mastered){
-        weakQuestions.push({subject:DATA[key].name, question:q.q, wrongs:st.wrongs});
-      }
-    }
-  }
-  weakQuestions.sort((a,b)=>b.wrongs-a.wrongs);
   const rows = stats.map(s=>`
     <tr>
       <td>${s.name}</td>
@@ -1712,15 +1720,24 @@ function renderParent(){
       <td>${s.wrong}</td>
       <td>${s.learned}/${s.total}</td>
     </tr>`).join("");
-  const weakText = weak.length
-    ? `建议优先练：${weak.map(s=>`${s.name}${s.wrong?`（错题${s.wrong}）`:""}`).join("、")}。`
-    : "还没有练习记录。先让孩子每天完成 10 题，系统会慢慢看出薄弱科目。";
-  const weakDetail = weakQuestions.length
-    ? `薄弱题点：${weakQuestions.slice(0,5).map(x=>`${x.subject}「${x.question.replace(/<[^>]+>/g,"").slice(0,24)}」错${x.wrongs}次`).join("；")}。`
+  // 推荐难度
+  const rec = report.recommend;
+  const recArrow = rec.dir==="up"? "⬆️ 可适当加难" : rec.dir==="down"? "⬇️ 建议先巩固基础" : "➡️ 保持当前难度";
+  // 薄弱知识点
+  const weakTagsHtml = report.weakTags.length
+    ? report.weakTags.slice(0,6).map(t=>{
+        const color = t.rate>=85? "#1c8f48" : t.rate>=70? "#b07d00" : "#d63b3b";
+        return `<li><b>${t.tag}</b>：正确率 <span style="color:${color}">${t.rate}%</span>（${t.attempts}题）· ${t.status}</li>`;
+      }).join("")
+    : "<li>还没有足够的答题数据，多练几道题就能看出薄弱知识点。</li>";
+  // 最近薄弱题点
+  const weakDetail = report.recentWrong.length
+    ? report.recentWrong.slice(0,5).map(x=>`${x.subject}「${x.q.replace(/<[^>]+>/g,"").slice(0,22)}」错${x.wrongs}次`).join("；")
     : "暂时还没有具体薄弱题点。";
+  const gradeText = report.grade==null? "未设置（显示全部难度）" : gradeLabel(report.grade);
   document.getElementById("parentCard").innerHTML = `
     <div class="mode-title">家长查看</div>
-    <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · ${cloudLabel()}</div>
+    <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · 年级：${gradeText} · ${cloudLabel()}</div>
     <div class="parent-summary">
       <div class="parent-box"><b>${totalAttempts}</b><span>总答题</span></div>
       <div class="parent-box"><b>${avgRate}%</b><span>总正确率</span></div>
@@ -1731,7 +1748,13 @@ function renderParent(){
       <thead><tr><th>科目</th><th>答题</th><th>正确率</th><th>错题</th><th>已会</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="parent-note">${weakText}<br>${weakDetail}<br>错题规则：同一道题连续答对 5 次后，会自动归入“已学会”，并从错题本里移除。</div>
+    <div class="setup-label" style="margin-top:18px">📊 知识点掌握情况</div>
+    <ul style="margin:6px 0 0 18px;line-height:1.7;font-size:15px;color:#4d5f70">${weakTagsHtml}</ul>
+    <div class="parent-note">
+      当前推荐难度：${recArrow}。${rec.text}<br>
+      最近薄弱题点：${weakDetail}<br>
+      错题规则：同一道题连续答对 5 次后，自动归入“已学会”并移出错题本。
+    </div>
     <button class="nextbtn show" onclick="exportProgress()" style="background:linear-gradient(135deg,#4a90e2,#56ccf2);margin-top:12px;margin-bottom:10px;">导出学习记录</button>
     <button class="nextbtn show" onclick="document.getElementById('importProgressFile').click()" style="background:#cfd9e2;color:#33414f;margin-top:0;">导入学习记录</button>
     <input id="importProgressFile" type="file" accept="application/json" style="display:none" onchange="importProgress(event)">
@@ -1961,8 +1984,9 @@ function renderQuestion(){
   const item = testQueue[testIdx];
   const q = item.q;
   document.getElementById("testBar").style.width = (testIdx/testQueue.length*100)+"%";
+  const meta = `${q.level||"基础"}${(q.tags&&q.tags[0])? " · "+q.tags[0] : ""}`;
   document.getElementById("qType").textContent =
-    `第 ${testIdx+1} / ${testQueue.length} 题` + (testMode==="wrong"?" · 错题重练":"");
+    `第 ${testIdx+1} / ${testQueue.length} 题 · ${meta}` + (testMode==="wrong"?" · 错题重练":"");
   document.getElementById("qText").textContent = q.q;
   const hint = document.getElementById("qHint");
   let hintHtml = q.text? `<span class="read-text">${q.text}</span>` : "";
@@ -1970,15 +1994,15 @@ function renderQuestion(){
   hintHtml += `<button class="speakbtn" onclick="speakQuestion()">🔊 听一听</button>`;
   hint.innerHTML = hintHtml;
 
-  // 选项乱序
-  const opts = q.o.map((t,idx)=>({t, correct: idx===q.a}));
-  shuffle(opts);
+  // 选项乱序：用通用函数打乱，正确答案索引同步更新（不影响错题记录）
+  const shown = shuffleQuestionOptions(q);
   const box = document.getElementById("qOptions");
   box.innerHTML="";
-  opts.forEach(op=>{
+  shown.o.forEach((text,idx)=>{
+    const correct = idx===shown.a;
     const b=document.createElement("button");
-    b.className="opt"; b.textContent=op.t;
-    b.onclick=()=>choose(b, op.correct, item.i);
+    b.className="opt"; b.textContent=text;
+    b.onclick=()=>choose(b, correct, item.i);
     box.appendChild(b);
   });
 }
@@ -1986,11 +2010,15 @@ function renderQuestion(){
 function choose(btn, correct, qIndex){
   if(answered) return;
   answered=true;
+  const q = DATA[curSubject].questions[qIndex];
   recordAnswer(curSubject, correct);
+  recordAnswerMeta(q, correct);                 // 最近正确率 + 知识点统计
   const qStat = recordQuestionResult(curSubject, qIndex, correct);
   const all = document.querySelectorAll("#qOptions .opt");
   all.forEach(b=>b.classList.add("disabled"));
   const fb = document.getElementById("qFeedback");
+  const explainHtml = q.explain
+    ? `<div style="margin-top:8px;font-weight:600;font-size:15px;line-height:1.5">📘 ${q.explain}</div>` : "";
 
   if(correct){
     btn.classList.add("correct");
@@ -2000,9 +2028,10 @@ function choose(btn, correct, qIndex){
     // 连续答对到学会后，才从错题本移除；避免一次猜对就被清掉。
     if(qStat.mastered) removeWrong(curSubject, qIndex);
     fb.className="feedback show ok";
-    fb.innerHTML = qStat.mastered
+    const head = qStat.mastered
       ? "🏆 连续答对 5 次，这题已经归入“已学会”啦！以后日常测试会少考它。"
       : pick(["🎉 答对啦！真聪明！","⭐ 太棒了！","👍 完全正确！","🌟 你真厉害！"]) + ` 连对 ${qStat.rightStreak}/5`;
+    fb.innerHTML = head + explainHtml;
   } else {
     btn.classList.add("wrong");
     sfx("no");
@@ -2010,7 +2039,8 @@ function choose(btn, correct, qIndex){
     all.forEach(b=>{ if(b.textContent===correctText(qIndex)) b.classList.add("correct"); });
     addWrong(curSubject, qIndex);
     fb.className="feedback show no";
-    fb.innerHTML = "💪 没关系，再记一记！正确答案是绿色的那个，已经放进错题本啦。";
+    fb.innerHTML = `答错了，正确答案是：<b>${correctText(qIndex)}</b>。${explainHtml}`
+      + `<div style="margin-top:8px">💪 没关系，已经放进错题本，复习几次就记住啦！</div>`;
   }
   save();
   document.getElementById("totalStars").textContent = store.stars;
@@ -2074,8 +2104,212 @@ function removeWrong(key, idx){
 function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } }
 function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
 
+/* ============================================================
+   年级体系 + 题库字段增强（id/subject/年级/难度/知识点/解析）
+   说明：题目是「确定性生成」的，所以这里不改变题目顺序，
+   只在 buildAll() 之后给每道题补全字段，错题本(按索引)不受影响。
+   ============================================================ */
+const GRADES = [
+  {g:0, label:"幼儿园大班"},
+  {g:1, label:"一年级"}, {g:2, label:"二年级"}, {g:3, label:"三年级"},
+  {g:4, label:"四年级"}, {g:5, label:"五年级"}, {g:6, label:"六年级"},
+];
+const LEVEL_BY_LV = {1:"基础", 2:"提高", 3:"挑战"};
+function gradeLabel(g){ const x=GRADES.find(z=>z.g===g); return x? x.label : "不限"; }
+
+// lv→年级基准区间（再按学科/内容微调）
+function baseGradeBand(subject, lv){
+  if(lv>=3) return [5,6];
+  if(lv===2) return [3,4];
+  // lv1：数学/英语/小科学/动植物最简单，含幼儿园大班
+  if(["english","math","biology","chemistry","physics"].includes(subject)) return [0,2];
+  if(subject==="idiom") return [2,3];   // 成语不适合幼儿园
+  return [1,2];
+}
+// 命中这些关键词的题目，最低年级要往上抬，避免低年级刷到超纲科学题
+const GRADE_RAISE = [
+  [/汞|水银/, 6], [/铬|不锈钢/, 6], [/酸碱指示剂|指示剂/, 6], [/酸雨/, 5],
+  [/氧化|硫化|氯化钠|光合作用|化学变化|物理变化|石墨|凝华/, 5],
+  [/沸点|冰点|升华|表面张力|活性炭|吸附|惯性|杠杆|滑轮|斜面|凸透镜|凹透镜|折射|色散|静电|超声波|电磁|绝缘|导体|动能|势能|摩擦力|浮力|弹力/, 5],
+  [/比例|分数|小数|公转|自转|半球|经纬|秦岭|节气|夏至|冬至/, 5],
+];
+function inferGradeBand(subject, lv, q){
+  let [gmin, gmax] = baseGradeBand(subject, lv);
+  for(const [re, g] of GRADE_RAISE){
+    if(re.test(q)){ gmin = Math.max(gmin, g); gmax = 6; break; }
+  }
+  if(gmin > gmax) gmax = gmin;
+  return [gmin, gmax];
+}
+// 知识点标签规则（命中第一条即为该题标签）
+const TAG_RULES = {
+  math:[[/\+/, "加法"],[/×|乘|口诀/, "乘法"],[/÷|除|余数/, "除法"],[/-|减/, "减法"],
+        [/周长/, "周长"],[/面积/, "面积"],[/规律/, "找规律"],[/哪个大|比大小/, "比大小"],
+        [/排队|一共.*人|剩/, "数量关系"]],
+  english:[[/颜色|red|blue|yellow|green/, "颜色词"],[/第一个字母|字母/, "字母"],
+           [/什么意思|意思/, "词义"],[/怎么说|看图/, "单词拼读"]],
+  chemistry:[[/溶解/, "溶解"],[/氧气|二氧化碳|氮气|气体|空气/, "空气与气体"],
+             [/冰|沸|蒸发|凝结|凝固|融化|水蒸气|三态|升华/, "水和物态变化"],[/酸|碱|指示剂/, "酸碱启蒙"],
+             [/氧化|生锈|燃烧|硫化/, "氧化与燃烧"],[/味道|咸|甜|酸的|苦/, "生活常识"]],
+  physics:[[/磁/, "磁铁"],[/光|影|镜|彩虹|折射|透镜|色散/, "光和影子"],[/声|音|回声|振动/, "声音"],
+           [/浮|沉/, "浮和沉"],[/力|重|摩擦|惯性|杠杆|滑轮|斜面/, "力和简单机械"],[/电/, "电"]],
+  biology:[[/呼吸|鳃|肺/, "动物呼吸"],[/植物|花|草|树|光合|向日葵|仙人掌/, "植物常识"],
+           [/恐龙|化石/, "恐龙"],[/几条腿|腿/, "动物特征"],[/住在|生活在/, "动物栖息"],[/牙|刷牙|身体|卫生/, "身体健康"]],
+  geography:[[/省会|首都|直辖市|行政区/, "行政区与首都"],[/洲|洋/, "七大洲四大洋"],
+             [/河|江|湖/, "河流湖泊"],[/山|高原|沙漠|平原/, "地形地貌"],[/自转|公转|半球|季|节气|昼夜|白天|黑夜/, "地球运动"],
+             [/方向|地图|指南针/, "方向与地图"]],
+  reading:[[/.*/, "短文阅读"]],
+  idiom:[[/补全成语/, "成语填字"],[/什么意思/, "成语含义"],[/.*/, "成语理解"]],
+};
+function inferTags(subject, q){
+  const rules = TAG_RULES[subject] || [];
+  for(const [re, tag] of rules){ if(re.test(q)) return [tag]; }
+  return [DATA[subject]?.name || "综合"];
+}
+// 针对个别题目的高质量解析（其余题目用模板解析）
+const EXPLAIN_OVERRIDES = {
+  "水银温度计里银白色会流动的金属是？":"水银就是金属汞，常温下是会流动的银白色液态金属，有毒。温度计打碎后不要用手碰。",
+  "不锈钢锅不容易生锈，是因为钢里加了一种金属——铬，它能？":"铬能在钢表面形成一层很薄的致密保护膜，挡住空气和水，钢就不容易被氧化生锈。",
+  "酸雨会腐蚀建筑和植物，它主要是空气被什么污染造成的？":"酸雨主要是工厂、汽车排放的废气（含硫、氮的氧化物）溶进雨水形成的，会腐蚀建筑和树木。",
+  "紫甘蓝的汁遇到酸会变红、遇到碱会变绿，可以用来当？":"能随酸碱变颜色的物质叫酸碱指示剂，紫甘蓝汁就是一种天然的酸碱指示剂。",
+  "高山上水不到100度就开了，说明海拔越高，水的沸点？":"海拔越高、气压越低，水更容易变成水蒸气，所以沸点越低。100℃是标准大气压下的沸点。",
+  "把硬币轻轻放在水面上有时不会沉，靠的是水的？":"水面像有一层薄膜，这种现象叫表面张力，能托住很轻的硬币或小昆虫。",
+  "鱼用什么呼吸？":"鱼通常用鳃从水里获得溶解的氧气，所以多数鱼离开水不能长时间生存。",
+};
+function correctOptText(q){ return q.o[q.a]; }
+function buildExplain(subject, q){
+  if(q.explain) return q.explain;
+  const ans = correctOptText(q);
+  if(subject==="reading") return `正确答案是「${ans}」。回到上面的短文里，找到相关的那句话就能确认。`;
+  if(subject==="english") return `正确答案是「${ans}」。记住它的意思和读音，多读两遍就不会错啦。`;
+  if(subject==="idiom")   return `正确答案是「${ans}」。记住这个成语的意思，再想想能用在什么场景。`;
+  if(subject==="math")    return `正确答案是「${ans}」。可以在草稿纸上再算一遍来验证。`;
+  return `正确答案是「${ans}」。`;
+}
+// 给全部题目补全字段（id / subject / level / 年级 / tags / explain / type / source）
+function normalizeQuestionBank(){
+  for(const subject in DATA){
+    const qs = DATA[subject].questions || [];
+    qs.forEach((q, i)=>{
+      if(q.__norm) return;
+      const lv = q.lv || 1;
+      const [gmin, gmax] = inferGradeBand(subject, lv, q.q);
+      q.id        = q.id || `${subject}-${i}`;
+      q.subject   = subject;
+      q.level     = LEVEL_BY_LV[lv] || "基础";
+      q.gradeMin  = gmin;
+      q.gradeMax  = gmax;
+      q.tags      = inferTags(subject, q.q);
+      q.explain   = EXPLAIN_OVERRIDES[q.q] || buildExplain(subject, q);
+      q.type      = "single-choice";
+      q.source    = "自建题库";
+      q.__norm    = true;
+    });
+  }
+}
+// 按年级 / 学科 / 难度筛题
+function getQuestionsByGrade(grade, subject, level){
+  const out = [];
+  const subs = subject ? [subject] : Object.keys(DATA);
+  subs.forEach(s=>{
+    (DATA[s].questions||[]).forEach((q,i)=>{
+      if(grade!=null && !(q.gradeMin<=grade && grade<=q.gradeMax)) return;
+      if(level && level!=='all' && q.level!==level) return;
+      out.push({subject:s, i, q});
+    });
+  });
+  return out;
+}
+// 通用：打乱选项并同步更新正确答案索引（题目 id 不变，不影响错题记录）
+function shuffleQuestionOptions(question){
+  const items = question.o.map((text, index)=>({ text, isCorrect: index===question.a }));
+  for(let i=items.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return { ...question, o: items.map(it=>it.text), a: items.findIndex(it=>it.isCorrect) };
+}
+
+/* ---------- 自适应难度 + 知识点统计 ---------- */
+// 记录一题的作答（用于最近正确率 + 知识点薄弱分析）
+function recordAnswerMeta(q, isCorrect){
+  if(!q) return;
+  store.recent = store.recent || [];
+  store.recent.push({c:isCorrect?1:0, s:q.subject, t:q.tags||[], ts:Date.now()});
+  if(store.recent.length>30) store.recent = store.recent.slice(-30);
+  store.tagstats = store.tagstats || {};
+  (q.tags||[]).forEach(tag=>{
+    const st = store.tagstats[tag] || {attempts:0, correct:0};
+    st.attempts++; if(isCorrect) st.correct++;
+    store.tagstats[tag] = st;
+  });
+}
+// 根据最近 10 题正确率推荐难度方向
+function getRecommendedLevel(){
+  const recent = (store.recent||[]).slice(-10);
+  const n = recent.length;
+  if(n<4) return {dir:"stay", rate:null, level:"基础", text:"先多做几题，系统会自动判断合适的难度。"};
+  const rate = Math.round(recent.filter(r=>r.c).length / n * 100);
+  if(rate>=85) return {dir:"up",   rate, level:"提高", text:`最近 ${n} 题正确率 ${rate}%，可以尝试更高一点的难度啦。`};
+  if(rate<60)  return {dir:"down", rate, level:"基础", text:`最近 ${n} 题正确率 ${rate}%，建议先巩固基础题和错题。`};
+  return            {dir:"stay", rate, level:"提高", text:`最近 ${n} 题正确率 ${rate}%，保持当前难度继续练习。`};
+}
+// 当前选题的有效年级窗口（按推荐结果略微放宽/收紧）
+function gradeWindow(){
+  const g = store.grade;
+  if(g==null) return null;                 // 不限年级
+  const rec = getRecommendedLevel();
+  let lo = Math.max(0, g-1), hi = g;
+  if(rec.dir==="up")   hi = g+1;           // 表现好：放开高一档基础题
+  if(rec.dir==="down") { hi = g; lo = Math.max(0, g-1); }
+  return [lo, hi];
+}
+function gradeMatch(q, win){
+  if(!win) return true;
+  return q.gradeMin<=win[1] && q.gradeMax>=win[0];
+}
+// 统计薄弱知识点
+function getWeakTags(minAttempts){
+  minAttempts = minAttempts || 3;
+  const out = [], ts = store.tagstats || {};
+  for(const tag in ts){
+    const st = ts[tag];
+    if(st.attempts < minAttempts) continue;
+    const rate = Math.round(st.correct/st.attempts*100);
+    const status = rate>=85? "已掌握" : rate>=70? "继续练习" : "建议复习";
+    out.push({tag, rate, attempts:st.attempts, status});
+  }
+  out.sort((a,b)=>a.rate-b.rate);
+  return out;
+}
+// 生成家长查看报告
+function getParentReport(){
+  const stats = allSubjectStats();
+  const totalAttempts = stats.reduce((s,x)=>s+x.attempts,0);
+  const totalCorrect  = stats.reduce((s,x)=>s+x.correct,0);
+  const avgRate = totalAttempts? Math.round(totalCorrect/totalAttempts*100) : 0;
+  const recentWrong = [];
+  for(const key in DATA){
+    const qstats = store.qstats[key] || {};
+    for(const idx in qstats){
+      const st = qstats[idx], q = DATA[key].questions[Number(idx)];
+      if(q && st.wrongs>0 && !st.mastered)
+        recentWrong.push({subject:DATA[key].name, q:q.q, tags:q.tags||[], wrongs:st.wrongs});
+    }
+  }
+  recentWrong.sort((a,b)=>b.wrongs-a.wrongs);
+  return {
+    totalAttempts, avgRate, stats,
+    weakTags: getWeakTags(),
+    recommend: getRecommendedLevel(),
+    recentWrong,
+    grade: store.grade
+  };
+}
+
 /* ============== 启动 ============== */
 buildAll();
+normalizeQuestionBank();   // 给全部题目补全年级/难度/知识点/解析字段
 function initApp(){
   if(activeProfile){
     go("home");
