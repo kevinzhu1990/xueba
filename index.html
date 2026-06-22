@@ -194,16 +194,45 @@
       <div class="auth-card">
         <div class="auth-emoji">🎒</div>
         <div class="auth-title">小学霸学习乐园</div>
-        <div class="auth-sub">输入昵称和家庭码，就可以开始学习。<br>同一台设备上，不同昵称会分开保存进度。</div>
-        <div class="auth-label">昵称</div>
-        <input id="loginName" class="auth-input" maxlength="12" autocomplete="nickname" placeholder="比如：小明">
-        <div class="auth-label">家庭码</div>
-        <input id="loginCode" class="auth-input" maxlength="20" autocomplete="off" placeholder="请输入家庭码">
+        <div class="auth-sub">家长登录后可以管理多个孩子档案，并把学习记录同步到云端。<br>也可以先用游客模式体验。</div>
+        <div class="auth-label">家长邮箱</div>
+        <input id="parentEmail" class="auth-input" maxlength="80" autocomplete="email" placeholder="parent@example.com">
+        <div class="auth-label">密码</div>
+        <input id="parentPassword" class="auth-input" type="password" maxlength="40" autocomplete="current-password" placeholder="至少 6 位">
+        <div class="auth-label">家长昵称（注册时填写）</div>
+        <input id="parentName" class="auth-input" maxlength="16" autocomplete="name" placeholder="比如：妈妈">
         <div class="auth-error" id="loginError"></div>
-        <button class="startbtn" onclick="login()">进入学习乐园 →</button>
-        <button class="plain-link" onclick="openParentGate()">家长查看学习情况</button>
-        <div class="auth-tip">默认家庭码：xueba2026。以后可以改成你自己的家庭码。</div>
+        <button class="startbtn" onclick="loginParentUI()">家长登录 →</button>
+        <button class="startbtn" onclick="registerParentUI()" style="margin-top:10px;background:linear-gradient(135deg,#4a90e2,#56ccf2)">注册家长账号</button>
+        <button class="plain-link" onclick="startGuest()">游客体验</button>
+        <div class="auth-tip">未配置 Firebase 时，会使用本机家长账号模式；配置 Firebase 后自动启用云端账号和学习记录。</div>
       </div>
+    </div>
+  </div>
+
+  <!-- 孩子选择 -->
+  <div id="childScreen" class="screen">
+    <button class="backbtn" onclick="logoutParent()">← 退出家长账号</button>
+    <div class="card">
+      <div class="mode-title">选择孩子档案</div>
+      <div class="mode-sub" id="parentAccountInfo"></div>
+      <div id="childList" class="modebtns"></div>
+      <div class="setup-label">新增 / 编辑孩子</div>
+      <input id="childNameInput" class="auth-input" maxlength="12" placeholder="孩子昵称">
+      <select id="childGradeInput" class="auth-input" style="margin-top:10px">
+        <option value="">选择年级</option>
+        <option value="0">幼儿园大班</option>
+        <option value="1">一年级</option>
+        <option value="2">二年级</option>
+        <option value="3">三年级</option>
+        <option value="4">四年级</option>
+        <option value="5">五年级</option>
+        <option value="6">六年级</option>
+      </select>
+      <div class="chips" id="avatarChips" style="margin-top:10px"></div>
+      <div class="auth-error" id="childError"></div>
+      <button class="startbtn" onclick="createChildUI()">保存孩子档案</button>
+      <button class="plain-link" onclick="openParentDashboard()">查看家长后台</button>
     </div>
   </div>
 
@@ -211,8 +240,9 @@
   <div id="home" class="screen">
     <div class="topbar">
       <h1>🎒 小学霸乐园</h1>
-      <button id="profileBtn" class="profile-chip" onclick="logout()" title="切换登录"></button>
+      <button id="profileBtn" class="profile-chip" onclick="switchChild()" title="切换孩子"></button>
       <button class="profile-chip" onclick="openParentGate()" title="家长查看">家长</button>
+      <button class="profile-chip" onclick="logoutParent()" title="退出登录">退出</button>
       <button id="soundBtn" class="sound-btn" onclick="toggleSound()" title="声音开关">🔊</button>
       <div class="star-box">⭐ <span id="totalStars">0</span></div>
     </div>
@@ -1292,137 +1322,288 @@ function genCards(){
   ]);
 }
 
-/* ============== 状态与存储 ============== */
+/* ============== 家长账号 / 孩子档案 / 本地与云端存储 ============== */
 const BASE_SAVE_KEY = "xueba_save_v1";
 const PROFILE_KEY = "xueba_active_profile_v1";
+const PARENT_SESSION_KEY = "xueba_parent_session_v1";
+const LOCAL_PARENT_KEY = "xueba_local_parent_accounts_v1";
+const LOCAL_CHILDREN_KEY = "xueba_local_children_v1";
 const FAMILY_CODE = "xueba2026";
-const CLOUD_API = "";
+const AVATARS = ["🧒","👧","👦","🐣","🌟","🚀","🦄","🐼"];
+
+// 填入 Firebase Web config 后自动启用 Firebase Auth + Firestore。
+// 不要在这里放私钥；Web config 可以公开，安全边界依赖 Firestore Rules。
+const FIREBASE_CONFIG = {
+  apiKey: "",
+  authDomain: "",
+  projectId: "",
+  appId: ""
+};
+
 let cloudTimer = null;
 let cloudState = "local";
+let firebaseReady = false;
+let firebaseInitPromise = null;
+let currentParent = loadParentSession();
+let currentChild = null;
+let childrenCache = [];
+let selectedAvatar = AVATARS[0];
 let activeProfile = loadProfile();
 let SAVE_KEY = profileSaveKey(activeProfile);
 let store = load();
-function loadProfile(){
-  try{ return JSON.parse(localStorage.getItem(PROFILE_KEY)) || null; }
-  catch(e){ return null; }
+
+function firebaseConfigured(){ return !!(FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.projectId && FIREBASE_CONFIG.authDomain); }
+function loadScript(src){
+  return new Promise((resolve,reject)=>{
+    if([...document.scripts].some(s=>s.src===src)){ resolve(); return; }
+    const sc=document.createElement('script'); sc.src=src; sc.onload=resolve; sc.onerror=reject; document.head.appendChild(sc);
+  });
 }
-function profileId(name){
-  return String(name||"guest").trim().toLowerCase().replace(/\s+/g,"_").replace(/[^\w\u4e00-\u9fa5-]/g,"").slice(0,24) || "guest";
+async function initAuth(){
+  if(firebaseInitPromise) return firebaseInitPromise;
+  firebaseInitPromise = (async()=>{
+    if(!firebaseConfigured()) { firebaseReady=false; return false; }
+    try{
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js');
+      await loadScript('https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js');
+      if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+      firebaseReady = true;
+      return true;
+    }catch(e){ firebaseReady=false; cloudState="local"; return false; }
+  })();
+  return firebaseInitPromise;
 }
+function getCurrentUser(){ return currentParent; }
+function onAuthStateChangedHandler(callback){ callback(currentParent); }
+
+function localParentAccounts(){ try{return JSON.parse(localStorage.getItem(LOCAL_PARENT_KEY)||'{}');}catch(e){return{};} }
+function saveLocalParentAccounts(accounts){ localStorage.setItem(LOCAL_PARENT_KEY, JSON.stringify(accounts)); }
+function localPasswordToken(password){ return btoa(unescape(encodeURIComponent(String(password||'')))); }
+function parentUidFromEmail(email){ return 'local_'+profileId(email); }
+function loadParentSession(){ try{return JSON.parse(localStorage.getItem(PARENT_SESSION_KEY)||'null');}catch(e){return null;} }
+function saveParentSession(parent){ parent ? localStorage.setItem(PARENT_SESSION_KEY, JSON.stringify(parent)) : localStorage.removeItem(PARENT_SESSION_KEY); }
+
+async function registerParent(email, password, displayName){
+  email=String(email||'').trim().toLowerCase(); displayName=String(displayName||'家长').trim()||'家长';
+  if(!email || !password || password.length<6) throw new Error('请输入邮箱和至少 6 位密码');
+  await initAuth();
+  if(firebaseReady){
+    const cred = await firebase.auth().createUserWithEmailAndPassword(email,password);
+    await cred.user.updateProfile({displayName});
+    const parent={uid:cred.user.uid,email,displayName,familyCode:FAMILY_CODE,role:'parent'};
+    await firebase.firestore().collection('users').doc(parent.uid).set({...parent,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()},{merge:true});
+    currentParent=parent; saveParentSession(parent); cloudState='synced'; return parent;
+  }
+  const accounts=localParentAccounts();
+  if(accounts[email]) throw new Error('这个邮箱已注册，请直接登录');
+  const parent={uid:parentUidFromEmail(email),email,displayName,familyCode:FAMILY_CODE,role:'parent',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+  accounts[email]={...parent,passwordToken:localPasswordToken(password)}; saveLocalParentAccounts(accounts);
+  currentParent=parent; saveParentSession(parent); return parent;
+}
+async function loginParent(email, password){
+  email=String(email||'').trim().toLowerCase();
+  if(!email || !password) throw new Error('请输入邮箱和密码');
+  await initAuth();
+  if(firebaseReady){
+    const cred = await firebase.auth().signInWithEmailAndPassword(email,password);
+    const parent={uid:cred.user.uid,email:cred.user.email,displayName:cred.user.displayName||'家长',familyCode:FAMILY_CODE,role:'parent'};
+    currentParent=parent; saveParentSession(parent); cloudState='synced'; return parent;
+  }
+  const acc=localParentAccounts()[email];
+  if(!acc || acc.passwordToken!==localPasswordToken(password)) throw new Error('邮箱或密码不正确');
+  const {passwordToken, ...parent}=acc;
+  currentParent=parent; saveParentSession(parent); return parent;
+}
+async function logoutParent(){
+  if(firebaseReady) try{ await firebase.auth().signOut(); }catch(e){}
+  currentParent=null; currentChild=null; activeProfile=null; saveParentSession(null); localStorage.removeItem(PROFILE_KEY);
+  SAVE_KEY=profileSaveKey(null); store=load(); go('authScreen');
+}
+
+function profileId(name){ return String(name||'guest').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u4e00-\u9fa5-]/g,'').slice(0,32) || 'guest'; }
+function loadProfile(){ try{ return JSON.parse(localStorage.getItem(PROFILE_KEY)) || null; }catch(e){ return null; } }
 function profileSaveKey(profile){
-  return profile ? `${BASE_SAVE_KEY}_${profile.id}` : `${BASE_SAVE_KEY}_guest`;
+  if(!profile) return `${BASE_SAVE_KEY}_guest`;
+  const owner = profile.parentUid || 'guest';
+  return `${BASE_SAVE_KEY}_${owner}_${profile.id}`;
 }
-function load(){
-  try{ return normalizeStore(JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); }
-  catch(e){ return normalizeStore({}); }
-}
+function load(){ try{ return normalizeStore(JSON.parse(localStorage.getItem(SAVE_KEY)) || {}); }catch(e){ return normalizeStore({}); } }
 function save(options={}){
   store.updatedAt = new Date().toISOString();
   localStorage.setItem(SAVE_KEY, JSON.stringify(store));
+  if(currentChild){ currentChild.stars=store.stars; currentChild.grade=store.grade; currentChild.updatedAt=store.updatedAt; currentChild.lastStudyAt=store.lastStudy||currentChild.lastStudyAt; }
   if(!options.skipCloud) scheduleCloudSave();
 }
-function saveLocalOnly(){
-  localStorage.setItem(SAVE_KEY, JSON.stringify(store));
-}
-async function login(){
-  const name = document.getElementById("loginName").value.trim();
-  const code = document.getElementById("loginCode").value.trim();
-  const err = document.getElementById("loginError");
-  if(!name){ err.textContent = "先输入一个昵称哦"; return; }
-  if(code !== FAMILY_CODE){ err.textContent = "家庭码不对，再试一次"; return; }
-  err.textContent = "正在读取学习记录...";
-  activeProfile = {name, id:profileId(name)};
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(activeProfile));
-  SAVE_KEY = profileSaveKey(activeProfile);
-  store = load();
-  await syncFromCloud();
-  initApp();
-}
-function logout(){
-  if(!confirm("要切换登录的孩子吗？")) return;
-  localStorage.removeItem(PROFILE_KEY);
-  activeProfile = null;
-  SAVE_KEY = profileSaveKey(null);
-  store = load();
-  document.getElementById("loginName").value = "";
-  document.getElementById("loginCode").value = "";
-  document.getElementById("loginError").textContent = "";
-  go("authScreen");
-}
+function saveLocalOnly(){ localStorage.setItem(SAVE_KEY, JSON.stringify(store)); }
 function normalizeStore(s){
-  s.stars = Number(s.stars)||0;
-  s.wrong = s.wrong || {};
-  s.history = s.history || {};
-  s.qstats = s.qstats || {};
-  s.days = s.days || {};
-  s.streak = Number(s.streak)||0;
-  s.lastStudy = s.lastStudy || "";
-  s.updatedAt = s.updatedAt || "";
-  s.sound = (s.sound===undefined)? true : !!s.sound;   // 声音总开关，默认开
-  s.grade = (s.grade===undefined)? null : s.grade;     // 孩子年级 0-6；null=不限
-  s.recent = Array.isArray(s.recent)? s.recent : [];   // 最近若干题作答记录（自适应难度用）
-  s.tagstats = s.tagstats || {};                       // 按知识点统计 {tag:{attempts,correct}}
-  return s;
+  s.stars = Number(s.stars)||0; s.wrong = s.wrong || {}; s.history = s.history || {}; s.qstats = s.qstats || {}; s.days = s.days || {};
+  s.answerRecords = Array.isArray(s.answerRecords)? s.answerRecords : [];
+  s.dailyStats = s.dailyStats || {}; s.streak = Number(s.streak)||0; s.lastStudy = s.lastStudy || ''; s.updatedAt = s.updatedAt || '';
+  s.sound = (s.sound===undefined)? true : !!s.sound; s.grade = (s.grade===undefined)? null : s.grade;
+  s.recent = Array.isArray(s.recent)? s.recent : []; s.tagstats = s.tagstats || {}; return s;
+}
+function cloudEnabled(){ return !!(firebaseReady && currentParent && currentChild); }
+function cloudLabel(){ if(!firebaseConfigured()) return '本机保存'; if(!firebaseReady) return '本机保存'; return cloudState==='synced'?'云端已同步':cloudState==='syncing'?'云端同步中':'本机缓存'; }
+function scheduleCloudSave(){ if(!currentChild) return; clearTimeout(cloudTimer); cloudTimer=setTimeout(()=>syncToCloud(),700); }
+
+function localChildrenMap(){ try{return JSON.parse(localStorage.getItem(LOCAL_CHILDREN_KEY)||'{}');}catch(e){return{};} }
+function saveLocalChildrenMap(map){ localStorage.setItem(LOCAL_CHILDREN_KEY, JSON.stringify(map)); }
+function localChildren(parentUid){ const map=localChildrenMap(); return map[parentUid]||[]; }
+function saveLocalChildren(parentUid, children){ const map=localChildrenMap(); map[parentUid]=children; saveLocalChildrenMap(map); }
+async function createChildProfile(parentUid, childData){
+  const now=new Date().toISOString();
+  const child={id:childData.id||(`child_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`),name:childData.name,grade:childData.grade===''?null:Number(childData.grade),avatar:childData.avatar||AVATARS[0],stars:0,createdAt:now,updatedAt:now,lastStudyAt:''};
+  if(firebaseReady && parentUid && !parentUid.startsWith('local_')){
+    await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(child.id).set(child,{merge:true});
+  }
+  const list=localChildren(parentUid).filter(c=>c.id!==child.id); list.push(child); saveLocalChildren(parentUid,list);
+  return child;
+}
+async function updateChildProfile(parentUid, childId, data){
+  const patch={...data,updatedAt:new Date().toISOString()};
+  if(firebaseReady && parentUid && !parentUid.startsWith('local_')) await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).set(patch,{merge:true});
+  const list=localChildren(parentUid).map(c=>c.id===childId?{...c,...patch}:c); saveLocalChildren(parentUid,list);
+}
+async function getChildren(parentUid){
+  let list=localChildren(parentUid);
+  if(firebaseReady && parentUid && !parentUid.startsWith('local_')){
+    try{
+      const snap=await firebase.firestore().collection('users').doc(parentUid).collection('children').orderBy('createdAt').get();
+      list=snap.docs.map(d=>({id:d.id,...d.data()})); saveLocalChildren(parentUid,list); cloudState='synced';
+    }catch(e){ cloudState='local'; }
+  }
+  childrenCache=list; return list;
+}
+async function selectChild(childId){
+  const child=childrenCache.find(c=>c.id===childId) || localChildren(currentParent.uid).find(c=>c.id===childId);
+  if(!child) throw new Error('孩子档案不存在');
+  currentChild=child; activeProfile={id:child.id,name:child.name,grade:child.grade,avatar:child.avatar,parentUid:currentParent?.uid||'guest'};
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(activeProfile)); SAVE_KEY=profileSaveKey(activeProfile); store=load();
+  await syncFromCloud(); store.grade = child.grade==null? store.grade : child.grade; save({skipCloud:true});
+  await promptMigrateLegacyProgress();
+  go('home');
+}
+function getCurrentChild(){ return currentChild; }
+
+const authService={initAuth,registerParent,loginParent,logoutParent,getCurrentUser,onAuthStateChangedHandler};
+const childService={createChildProfile,updateChildProfile,getChildren,selectChild,getCurrentChild};
+const localStorageService={
+  saveGuestProgress(childName,data){ localStorage.setItem(`${BASE_SAVE_KEY}_guest_${profileId(childName)}`, JSON.stringify(data)); },
+  loadGuestProgress(childName){ try{return normalizeStore(JSON.parse(localStorage.getItem(`${BASE_SAVE_KEY}_guest_${profileId(childName)}`)||'{}'));}catch(e){return normalizeStore({});} },
+  async migrateGuestProgressToCloud(parentUid, childId){
+    const guest=normalizeStore(JSON.parse(localStorage.getItem(`${BASE_SAVE_KEY}_guest`)||'{}'));
+    store=mergeStores(store,guest); save(); await syncToCloud(true); return true;
+  },
+  clearGuestProgressAfterMigration(){ localStorage.setItem(`${BASE_SAVE_KEY}_guest_backup_${Date.now()}`, localStorage.getItem(`${BASE_SAVE_KEY}_guest`)||'{}'); }
+};
+function mergeStores(base, incoming){
+  base=normalizeStore(base||{}); incoming=normalizeStore(incoming||{});
+  base.stars=Math.max(base.stars,incoming.stars); base.wrong={...incoming.wrong,...base.wrong}; base.history={...incoming.history,...base.history};
+  base.qstats={...incoming.qstats,...base.qstats}; base.days={...incoming.days,...base.days}; base.answerRecords=[...(incoming.answerRecords||[]),...(base.answerRecords||[])].slice(-500);
+  base.recent=[...(incoming.recent||[]),...(base.recent||[])].slice(-30); base.tagstats={...incoming.tagstats,...base.tagstats}; return base;
 }
 
-function cloudEnabled(){
-  return !!(CLOUD_API && activeProfile && activeProfile.id);
-}
-function cloudLabel(){
-  if(!CLOUD_API) return "本机保存";
-  return cloudState==="synced" ? "云端已同步" : cloudState==="syncing" ? "云端同步中" : "本机保存";
-}
-function scheduleCloudSave(){
-  if(!cloudEnabled()) return;
-  clearTimeout(cloudTimer);
-  cloudTimer = setTimeout(()=>syncToCloud(), 700);
-}
 async function syncFromCloud(){
   if(!cloudEnabled()) return;
-  cloudState = "syncing";
+  cloudState='syncing';
   try{
-    const url = `${CLOUD_API.replace(/\/$/,"")}/api/progress?family=${encodeURIComponent(FAMILY_CODE)}&profile=${encodeURIComponent(activeProfile.id)}`;
-    const res = await fetch(url, {cache:"no-store"});
-    if(res.ok){
-      const data = await res.json();
-      if(data && data.store){
-        const remote = normalizeStore(data.store);
-        const remoteTime = Date.parse(remote.updatedAt || 0);
-        const localTime = Date.parse(store.updatedAt || 0);
-        if(remoteTime > localTime){
-          store = remote;
-          saveLocalOnly();
-        } else if(localTime > remoteTime){
-          await syncToCloud(true);
-        }
-      }
-      cloudState = "synced";
-    } else if(res.status===404){
-      await syncToCloud(true);
-    } else {
-      cloudState = "local";
-    }
-  }catch(e){
-    cloudState = "local";
-  }
+    const doc=await firebase.firestore().collection('users').doc(currentParent.uid).collection('children').doc(currentChild.id).get();
+    const data=doc.exists?doc.data():{}; const remote=normalizeStore(data.progressStore||{});
+    const remoteTime=Date.parse(remote.updatedAt||0), localTime=Date.parse(store.updatedAt||0);
+    if(remoteTime>localTime){ store=remote; saveLocalOnly(); }
+    else if(localTime>remoteTime){ await syncToCloud(true); }
+    cloudState='synced';
+  }catch(e){ cloudState='local'; }
 }
 async function syncToCloud(force=false){
   if(!cloudEnabled()) return;
-  if(!force && cloudState==="syncing") return;
-  cloudState = "syncing";
+  if(!force && cloudState==='syncing') return;
+  cloudState='syncing';
   try{
-    const res = await fetch(`${CLOUD_API.replace(/\/$/,"")}/api/progress`, {
-      method:"PUT",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({familyCode:FAMILY_CODE, profile:activeProfile, store})
-    });
-    cloudState = res.ok ? "synced" : "local";
-  }catch(e){
-    cloudState = "local";
-  }
-  if(document.getElementById("home")?.classList.contains("active")) renderHome();
+    await firebase.firestore().collection('users').doc(currentParent.uid).collection('children').doc(currentChild.id).set({
+      name:currentChild.name, grade:store.grade, avatar:currentChild.avatar, stars:store.stars, updatedAt:new Date().toISOString(), lastStudyAt:store.lastStudy, progressStore:store
+    },{merge:true});
+    cloudState='synced';
+  }catch(e){ cloudState='local'; }
+  if(document.getElementById('home')?.classList.contains('active')) renderHome();
 }
 
+async function saveAnswerRecord(parentUid, childId, record){
+  store.answerRecords = store.answerRecords || []; store.answerRecords.push(record); if(store.answerRecords.length>500) store.answerRecords=store.answerRecords.slice(-500);
+  if(cloudEnabled()) try{ await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).collection('answerRecords').doc(record.id).set(record); }catch(e){ cloudState='local'; }
+}
+async function saveWrongQuestion(parentUid, childId, wrongQuestion){
+  if(cloudEnabled()) try{ await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).collection('wrongQuestions').doc(wrongQuestion.questionId).set(wrongQuestion,{merge:true}); }catch(e){ cloudState='local'; }
+}
+async function updateDailyStats(parentUid, childId, answerRecord){
+  const key=answerRecord.date; const d=store.dailyStats[key]||{date:key,total:0,correct:0,accuracy:0,studyMinutes:0,starsEarned:0,subjects:{},weakTags:[],updatedAt:''};
+  d.total++; if(answerRecord.isCorrect) d.correct++; d.accuracy=Math.round(d.correct/d.total*100); d.starsEarned += answerRecord.isCorrect?1:0;
+  d.subjects[answerRecord.subject]=d.subjects[answerRecord.subject]||{total:0,correct:0}; d.subjects[answerRecord.subject].total++; if(answerRecord.isCorrect) d.subjects[answerRecord.subject].correct++;
+  d.weakTags=getWeakTags(1).slice(0,5).map(x=>x.tag); d.updatedAt=new Date().toISOString(); store.dailyStats[key]=d;
+  if(cloudEnabled()) try{ await firebase.firestore().collection('users').doc(parentUid).collection('children').doc(childId).collection('dailyStats').doc(key.replaceAll('-','')).set(d,{merge:true}); }catch(e){ cloudState='local'; }
+}
+function getChildStats(){ return getParentReport(); }
+function getWrongQuestions(){ return Object.keys(DATA).flatMap(subject=>(store.wrong[subject]||[]).map(i=>({subject,i,q:DATA[subject].questions[i]})).filter(x=>x.q)); }
+function getWeakTags(){ return window.getWeakTags ? window.getWeakTags() : []; }
+const learningRecordService={saveAnswerRecord,saveWrongQuestion,updateDailyStats,getChildStats,getWrongQuestions,getWeakTags};
+const reportService={getParentDashboard:()=>getParentReport(),getChildReport:()=>getParentReport(),getTodayStats:()=>store.days[todayKey()]||{attempts:0,correct:0},getSubjectAccuracy:subjectStats,getWeakKnowledgeTags:getWeakTags};
+
+async function loginParentUI(){
+  const err=document.getElementById('loginError'); err.textContent='正在登录...';
+  try{ await loginParent(document.getElementById('parentEmail').value, document.getElementById('parentPassword').value); await renderChildScreen(); }
+  catch(e){ err.textContent=e.message||'登录失败'; }
+}
+async function registerParentUI(){
+  const err=document.getElementById('loginError'); err.textContent='正在注册...';
+  try{ await registerParent(document.getElementById('parentEmail').value, document.getElementById('parentPassword').value, document.getElementById('parentName').value); await renderChildScreen(); }
+  catch(e){ err.textContent=e.message||'注册失败'; }
+}
+function startGuest(){ activeProfile={id:'guest',name:'游客',parentUid:'guest',avatar:'🎒',grade:null}; currentChild=activeProfile; localStorage.setItem(PROFILE_KEY, JSON.stringify(activeProfile)); SAVE_KEY=profileSaveKey(activeProfile); store=load(); go('home'); }
+async function renderChildScreen(){
+  if(!currentParent){ go('authScreen'); return; }
+  childrenCache=await getChildren(currentParent.uid);
+  document.getElementById('parentAccountInfo').textContent = `${currentParent.displayName||'家长'} · ${currentParent.email} · ${cloudLabel()}`;
+  renderAvatarChips();
+  const list=document.getElementById('childList');
+  list.innerHTML = childrenCache.length ? childrenCache.map(c=>`<button class="modebtn m-learn" onclick="selectChild('${c.id}')"><span class="big">${c.avatar||'🧒'}</span><span>${c.name}<small>${gradeLabel(c.grade)} · ⭐ ${c.stars||0} · 进入学习</small></span></button>`).join('') : '<div class="empty"><span class="emoji">👨‍👩‍👧</span>还没有孩子档案，先创建一个。</div>';
+  go('childScreen');
+}
+function renderAvatarChips(){ const box=document.getElementById('avatarChips'); if(!box) return; box.innerHTML=AVATARS.map(a=>`<div class="chip${selectedAvatar===a?' sel':''}" onclick="selectedAvatar='${a}';renderAvatarChips()">${a}</div>`).join(''); }
+async function createChildUI(){
+  const err=document.getElementById('childError'); const name=document.getElementById('childNameInput').value.trim(); const grade=document.getElementById('childGradeInput').value;
+  if(!name){ err.textContent='请输入孩子昵称'; return; }
+  err.textContent='正在保存...';
+  try{ await createChildProfile(currentParent.uid,{name,grade,avatar:selectedAvatar}); document.getElementById('childNameInput').value=''; err.textContent=''; await renderChildScreen(); }
+  catch(e){ err.textContent=e.message||'保存失败'; }
+}
+function switchChild(){ if(currentParent) renderChildScreen(); else logoutParent(); }
+function openParentDashboard(){ renderParent(); go('parentScreen'); }
+function openParentGate(){ if(currentParent){ renderParent(); go('parentScreen'); return; } const code=prompt('请输入家庭码查看游客学习情况：'); if(code===null) return; if(code.trim()!==FAMILY_CODE){ alert('家庭码不对'); return; } renderParent(); go('parentScreen'); }
+function parentBack(){ go(currentParent ? 'childScreen' : activeProfile ? 'home' : 'authScreen'); }
+
+async function promptMigrateLegacyProgress(){
+  const candidates = [];
+  for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i);
+    if(!key || !key.startsWith(BASE_SAVE_KEY+'_')) continue;
+    if(key===SAVE_KEY || key.includes('_backup_')) continue;
+    try{
+      const data=normalizeStore(JSON.parse(localStorage.getItem(key)||'{}'));
+      const useful=(data.stars||0) + Object.values(data.history||{}).reduce((s,h)=>s+(h.attempts||0),0) + Object.values(data.wrong||{}).reduce((s,a)=>s+(Array.isArray(a)?a.length:0),0);
+      if(useful>0) candidates.push({key,data,useful});
+    }catch(e){}
+  }
+  if(!candidates.length) return;
+  const total=candidates.reduce((s,x)=>s+x.useful,0);
+  if(!confirm(`检测到本机有旧学习记录（约 ${total} 条学习数据），是否合并到当前孩子「${currentChild.name}」？`)) return;
+  const backup={createdAt:new Date().toISOString(), keys:candidates.map(x=>x.key), data:candidates.map(x=>({key:x.key,store:x.data}))};
+  localStorage.setItem(`${BASE_SAVE_KEY}_legacy_backup_${Date.now()}`, JSON.stringify(backup));
+  candidates.forEach(x=>{ store=mergeStores(store,x.data); });
+  save();
+  await syncToCloud(true);
+  alert("旧学习记录已合并，并已在本机保留备份。");
+}
 /* ============== 声音：朗读开关 + 答题音效（无需音频文件） ============== */
 function toggleSound(){
   store.sound = !store.sound;
@@ -1540,7 +1721,8 @@ function recordQuestionResult(subject, idx, isCorrect){
   const st = getQStat(subject, idx);
   if(isCorrect){
     st.rightStreak++;
-    if(st.rightStreak>=5) st.mastered = true;
+    const targetStreak = (testMode==="wrong") ? 2 : 5;
+    if(st.rightStreak>=targetStreak) st.mastered = true;
   } else {
     st.rightStreak = 0;
     st.mastered = false;
@@ -1676,7 +1858,15 @@ function renderGradePanel(){
      <div class="chips" style="gap:8px">${chips}</div>
      <div class="habit-tip">${tip}</div>`;
 }
-function setGrade(g){ store.grade = g; save(); renderHome(); }
+function setGrade(g){
+  store.grade = g;
+  if(currentParent && currentChild){
+    currentChild.grade = g;
+    updateChildProfile(currentParent.uid, currentChild.id, {grade:g});
+  }
+  save();
+  renderHome();
+}
 
 function renderHabitPanel(){
   const today = store.days[todayKey()] || {attempts:0, correct:0};
@@ -1696,14 +1886,19 @@ function renderHabitPanel(){
 }
 
 function openParentGate(){
-  const code = prompt("请输入家庭码查看学习情况：");
+  if(currentParent){
+    renderParent();
+    go("parentScreen");
+    return;
+  }
+  const code = prompt("请输入家庭码查看游客学习情况：");
   if(code===null) return;
   if(code.trim()!==FAMILY_CODE){ alert("家庭码不对"); return; }
   renderParent();
   go("parentScreen");
 }
 function parentBack(){
-  go(activeProfile? "home" : "authScreen");
+  go(currentParent ? "childScreen" : activeProfile ? "home" : "authScreen");
 }
 function renderParent(){
   const report = getParentReport();
@@ -1735,9 +1930,30 @@ function renderParent(){
     ? report.recentWrong.slice(0,5).map(x=>`${x.subject}「${x.q.replace(/<[^>]+>/g,"").slice(0,22)}」错${x.wrongs}次`).join("；")
     : "暂时还没有具体薄弱题点。";
   const gradeText = report.grade==null? "未设置（显示全部难度）" : gradeLabel(report.grade);
+  const childOverview = (childrenCache||[]).map(c=>{
+    const childProfile={id:c.id,parentUid:currentParent?.uid||"guest"};
+    const childStore = normalizeStore(c.progressStore || JSON.parse(localStorage.getItem(profileSaveKey(childProfile)) || "{}"));
+    const today = childStore.days?.[todayKey()] || childStore.dailyStats?.[todayKey()] || {attempts:0,correct:0,total:0};
+    const total = today.attempts || today.total || 0;
+    const correct = today.correct || 0;
+    const rate = total ? Math.round(correct/total*100) : 0;
+    const weak = Object.entries(childStore.tagstats||{})
+      .filter(([,v])=>(v.attempts||0)>=2)
+      .map(([tag,v])=>({tag,rate:Math.round((v.correct||0)/(v.attempts||1)*100)}))
+      .sort((a,b)=>a.rate-b.rate)
+      .slice(0,2)
+      .map(x=>x.tag).join("、") || "暂无";
+    return `<tr><td>${c.avatar||"🧒"} ${c.name}</td><td>${gradeLabel(c.grade)}</td><td>${total}</td><td>${rate}%</td><td>${childStore.stars||c.stars||0}</td><td>${weak}</td></tr>`;
+  }).join("");
   document.getElementById("parentCard").innerHTML = `
     <div class="mode-title">家长查看</div>
     <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · 年级：${gradeText} · ${cloudLabel()}</div>
+    ${currentParent?`
+    <div class="setup-label" style="margin-top:8px">👨‍👩‍👧 所有孩子概览</div>
+    <table class="parent-table">
+      <thead><tr><th>孩子</th><th>年级</th><th>今日</th><th>正确率</th><th>星星</th><th>薄弱点</th></tr></thead>
+      <tbody>${childOverview || "<tr><td colspan=\"6\">还没有孩子档案</td></tr>"}</tbody>
+    </table>`:""}
     <div class="parent-summary">
       <div class="parent-box"><b>${totalAttempts}</b><span>总答题</span></div>
       <div class="parent-box"><b>${avgRate}%</b><span>总正确率</span></div>
@@ -2014,6 +2230,23 @@ function choose(btn, correct, qIndex){
   recordAnswer(curSubject, correct);
   recordAnswerMeta(q, correct);                 // 最近正确率 + 知识点统计
   const qStat = recordQuestionResult(curSubject, qIndex, correct);
+  const answerRecord = {
+    id:`${Date.now()}_${curSubject}_${qIndex}`,
+    questionId:q.id || `${curSubject}_${qIndex}`,
+    questionText:q.q,
+    subject:curSubject,
+    subjectName:DATA[curSubject].name,
+    level:q.lv || q.level || 1,
+    tags:q.tags || [],
+    gradeMin:q.gradeMin ?? null,
+    gradeMax:q.gradeMax ?? null,
+    userAnswer:btn.textContent,
+    correctAnswer:correctText(qIndex),
+    isCorrect:!!correct,
+    usedSeconds:0,
+    date:todayKey(),
+    createdAt:new Date().toISOString()
+  };
   const all = document.querySelectorAll("#qOptions .opt");
   all.forEach(b=>b.classList.add("disabled"));
   const fb = document.getElementById("qFeedback");
@@ -2028,9 +2261,10 @@ function choose(btn, correct, qIndex){
     // 连续答对到学会后，才从错题本移除；避免一次猜对就被清掉。
     if(qStat.mastered) removeWrong(curSubject, qIndex);
     fb.className="feedback show ok";
+    const targetStreak = (testMode==="wrong") ? 2 : 5;
     const head = qStat.mastered
-      ? "🏆 连续答对 5 次，这题已经归入“已学会”啦！以后日常测试会少考它。"
-      : pick(["🎉 答对啦！真聪明！","⭐ 太棒了！","👍 完全正确！","🌟 你真厉害！"]) + ` 连对 ${qStat.rightStreak}/5`;
+      ? `🏆 连续答对 ${targetStreak} 次，这题已经归入“已学会”啦！以后日常测试会少考它。`
+      : pick(["🎉 答对啦！真聪明！","⭐ 太棒了！","👍 完全正确！","🌟 你真厉害！"]) + ` 连对 ${qStat.rightStreak}/${targetStreak}`;
     fb.innerHTML = head + explainHtml;
   } else {
     btn.classList.add("wrong");
@@ -2041,6 +2275,36 @@ function choose(btn, correct, qIndex){
     fb.className="feedback show no";
     fb.innerHTML = `答错了，正确答案是：<b>${correctText(qIndex)}</b>。${explainHtml}`
       + `<div style="margin-top:8px">💪 没关系，已经放进错题本，复习几次就记住啦！</div>`;
+  }
+  learningRecordService.saveAnswerRecord(currentParent?.uid, currentChild?.id, answerRecord);
+  learningRecordService.updateDailyStats(currentParent?.uid, currentChild?.id, answerRecord);
+  if(!correct){
+    learningRecordService.saveWrongQuestion(currentParent?.uid, currentChild?.id, {
+      questionId:answerRecord.questionId,
+      questionText:answerRecord.questionText,
+      subject:answerRecord.subject,
+      level:answerRecord.level,
+      tags:answerRecord.tags,
+      wrongCount:qStat.wrongs,
+      correctReviewCount:qStat.rightStreak,
+      lastWrongAt:answerRecord.createdAt,
+      lastReviewAt:"",
+      isMastered:false,
+      updatedAt:answerRecord.createdAt
+    });
+  } else if(testMode==="wrong"){
+    learningRecordService.saveWrongQuestion(currentParent?.uid, currentChild?.id, {
+      questionId:answerRecord.questionId,
+      questionText:answerRecord.questionText,
+      subject:answerRecord.subject,
+      level:answerRecord.level,
+      tags:answerRecord.tags,
+      wrongCount:qStat.wrongs,
+      correctReviewCount:qStat.rightStreak,
+      lastReviewAt:answerRecord.createdAt,
+      isMastered:qStat.mastered,
+      updatedAt:answerRecord.createdAt
+    });
   }
   save();
   document.getElementById("totalStars").textContent = store.stars;
@@ -2311,11 +2575,16 @@ function getParentReport(){
 buildAll();
 normalizeQuestionBank();   // 给全部题目补全年级/难度/知识点/解析字段
 function initApp(){
-  if(activeProfile){
-    go("home");
-  } else {
-    go("authScreen");
-  }
+  initAuth().then(async()=>{
+    if(currentParent){
+      await renderChildScreen();
+    } else if(activeProfile && activeProfile.id==="guest"){
+      currentChild=activeProfile;
+      go("home");
+    } else {
+      go("authScreen");
+    }
+  });
 }
 initApp();
 </script>
