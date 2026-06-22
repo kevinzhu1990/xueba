@@ -332,7 +332,7 @@ const DATA = {
     ]
   },
   idiom: {
-    name:"成语", emoji:"📜", desc:"学成语、懂意思", color:"#ff8a5b",
+    name:"成语好词", emoji:"📜", desc:"学成语、积累好词", color:"#ff8a5b",
     cards:[
       {word:"画蛇添足", say:"huà shé tiān zú", mean:"画好了蛇又加上脚，比喻做了多余的事，反而不好。"},
       {word:"井底之蛙", say:"jǐng dǐ zhī wā", mean:"井底的青蛙只能看见小小的天，比喻见识很少的人。"},
@@ -411,7 +411,7 @@ const DATA = {
     ]
   },
   chemistry: {
-    name:"化学", emoji:"🧪", desc:"有趣的小变化", color:"#ffcc4d",
+    name:"小科学", emoji:"🧪", desc:"物质、变化和生活科学", color:"#ffcc4d",
     cards:[
       {word:"水的三态", say:"会变身", mean:"💧 水遇冷变成冰，加热会变成水蒸气。"},
       {word:"盐", say:"咸味", mean:"🧂 盐是咸的，能溶解在水里看不见了。"},
@@ -437,7 +437,7 @@ const DATA = {
       {word:"磁铁", say:"吸铁的", mean:"🧲 磁铁能吸住铁做的东西，比如回形针。"},
       {word:"影子", say:"光挡住了", mean:"🌑 光照不到的地方就有影子。"},
       {word:"声音", say:"会震动", mean:"🔔 东西震动就会发出声音，传到耳朵里。"},
-      {word:"浮和沉", say:"水里游戏", mean:"🛟 轻的东西在水里浮起来，重的会沉下去。"},
+      {word:"浮和沉", say:"水里游戏", mean:"🛟 物体能不能浮起来，和材料、形状、排开水的多少都有关系。"},
       {word:"轮子", say:"会滚动", mean:"🛞 圆圆的轮子会滚，让车跑得又快又省力。"},
     ],
     questions:[
@@ -445,7 +445,7 @@ const DATA = {
       {q:"磁铁能吸住什么？", o:["木头","回形针(铁)","纸","水"], a:1},
       {q:"什么时候会有影子？", o:["有光挡住时","天黑时","下雨时","睡觉时"], a:0},
       {q:"声音是怎么来的？", o:["东西震动","东西变色","东西变冷","东西发光"], a:0},
-      {q:"很轻的东西放进水里会？", o:["浮起来","沉下去","消失","变重"], a:0},
+      {q:"空塑料瓶放进水里通常会？", o:["浮起来","沉下去","消失","变重"], a:0},
       {q:"汽车为什么用圆轮子？", o:["好看","会滚动省力","便宜","防水"], a:1},
       {q:"我们用什么听声音？", o:["眼睛","耳朵","鼻子","手"], a:1},
     ]
@@ -479,9 +479,11 @@ const DATA = {
 
 /* ============== 题目生成引擎（确定性，不重复） ==============
    说明：生成顺序固定，所以每道题的索引在每次打开时都一样，
-   错题本(按索引保存)不会失效。每个学科生成后会被截断到 TARGET 题。 */
+   错题本(按索引保存)不会失效。不同学科可设置不同题量上限。 */
 const SESSION_N = 10;     // 每次"测一测"随机抽多少题
 const TARGET = 500;       // 每科目标题量上限
+const TARGET_BY_SUBJECT = { english: 800 };
+function subjectTarget(key){ return TARGET_BY_SUBJECT[key] || TARGET; }
 
 // 难度等级：1=简单(1-2年级) 2=中等(3-4年级) 3=较难(5-6年级)
 // 通用：往某学科追加一道选择题（自动去重、补足4个选项、正确答案放在o[0]、带难度lv）
@@ -490,7 +492,7 @@ function makePush(key, defaultLv){
   const arr = DATA[key].questions;
   const seen = new Set(arr.map(q=>q.q));
   return function(qtext, correct, cands, text, lv){
-    if(arr.length>=TARGET || seen.has(qtext)) return;
+    if(arr.length>=subjectTarget(key) || seen.has(qtext)) return;
     correct = String(correct);
     let opts=[correct];
     for(const c of (cands||[])){
@@ -575,6 +577,11 @@ const EN = {
   地点:[["home","家","🏠"],["park","公园","🏞️"],["zoo","动物园","🦒"],["shop","商店","🏪"],["hospital","医院","🏥"],["library","图书馆","📚"],["farm","农场","🚜"],["beach","沙滩","🏖️"]],
   数字:[["one","一","1️⃣"],["two","二","2️⃣"],["three","三","3️⃣"],["four","四","4️⃣"],["five","五","5️⃣"],["six","六","6️⃣"],["seven","七","7️⃣"],["eight","八","8️⃣"],["nine","九","9️⃣"],["ten","十","🔟"]]
 };
+function englishLv(cat, en){
+  if(["动物","水果","颜色","家人","数字"].includes(cat) && en.length<=6) return 1;
+  if(en.length>=8 || ["地点","学习","交通","衣物"].includes(cat)) return 3;
+  return 2;
+}
 function genEnglish(){
   const push = makePush("english");
   const LETTERS="ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
@@ -584,20 +591,24 @@ function genEnglish(){
       const [en,zh,emo]=w;
       const otherEn=list.filter((_,i)=>i!==idx).map(x=>x[0]);
       const otherZh=list.filter((_,i)=>i!==idx).map(x=>x[1]);
+      const lv = englishLv(cat, en);
       // 中→英
-      push(`${emo} ${zh} 用英语怎么说？`, en, rot(otherEn,idx));
+      push(`${emo} ${zh} 用英语怎么说？`, en, rot(otherEn,idx), null, lv);
       // 英→中
-      push(`${en} 是什么意思？`, zh, rot(otherZh,idx+1));
+      const meaningQ = (en==="orange" || en==="star" || en==="run" || en==="swim")
+        ? `${en} 在“${cat}”里是什么意思？`
+        : `${en} 是什么意思？`;
+      push(meaningQ, zh, rot(otherZh,idx+1), null, lv);
       // 首字母
       const L=en[0].toUpperCase();
-      push(`单词 ${en} 的第一个字母是？`, L, rot(LETTERS.filter(x=>x!==L), en.charCodeAt(0)));
+      push(`单词 ${en} 的第一个字母是？`, L, rot(LETTERS.filter(x=>x!==L), en.charCodeAt(0)), null, Math.max(1, lv-1));
       // 看图选英文（与中→英不同的题面）
-      push(`${emo} 看图选出正确的英文单词`, en, rot(otherEn,idx+2));
+      push(`${emo} 看图选出正确的英文单词`, en, rot(otherEn,idx+2), null, lv);
     });
   }
 }
 
-/* ---------- 成语：意思↔成语 + 填字 ---------- */
+/* ---------- 成语好词：意思↔词语 + 填字 ---------- */
 const IDIOMS=[
   ["画蛇添足","做了多余的事反而不好"],["井底之蛙","见识很少的人"],["亡羊补牢","出问题后及时补救还不晚"],
   ["守株待兔","不努力只想靠运气"],["对牛弹琴","对不懂的人讲道理白费力气"],["一举两得","做一件事得到两样好处"],
@@ -651,7 +662,7 @@ function genIdiom(){
     const [idiom,mean]=it;
     const otherIdioms = all.filter(x=>x!==idiom);
     const otherMeans = IDIOMS.filter((_,i)=>i!==idx).map(x=>x[1]);
-    push(`意思是“${mean}”的成语是？`, idiom, rot(otherIdioms,idx), null, 1);
+    push(`意思是“${mean}”的词语是？`, idiom, rot(otherIdioms,idx), null, 1);
     push(`“${idiom}”是什么意思？`, mean, rot(otherMeans,idx+2), null, 2);
     // 填字（挖掉最后一个字）
     const last=idiom[idiom.length-1];
@@ -663,11 +674,16 @@ function genIdiom(){
 }
 
 /* ---------- 地理 ---------- */
-const PROVINCES=[["北京","北京"],["上海","上海"],["天津","天津"],["重庆","重庆"],["广东","广州"],["四川","成都"],["江苏","南京"],["浙江","杭州"],["山东","济南"],["河南","郑州"],["河北","石家庄"],["湖南","长沙"],["湖北","武汉"],["福建","福州"],["江西","南昌"],["安徽","合肥"],["陕西","西安"],["山西","太原"],["辽宁","沈阳"],["吉林","长春"],["云南","昆明"],["贵州","贵阳"],["海南","海口"],["甘肃","兰州"],["青海","西宁"],["台湾","台北"]];
+const MUNICIPALITIES=["北京","上海","天津","重庆"];
+const PROVINCES=[["广东","广州"],["四川","成都"],["江苏","南京"],["浙江","杭州"],["山东","济南"],["河南","郑州"],["河北","石家庄"],["湖南","长沙"],["湖北","武汉"],["福建","福州"],["江西","南昌"],["安徽","合肥"],["陕西","西安"],["山西","太原"],["辽宁","沈阳"],["吉林","长春"],["云南","昆明"],["贵州","贵阳"],["海南","海口"],["甘肃","兰州"],["青海","西宁"]];
 const COUNTRIES=[["中国","北京","亚洲"],["日本","东京","亚洲"],["韩国","首尔","亚洲"],["泰国","曼谷","亚洲"],["印度","新德里","亚洲"],["英国","伦敦","欧洲"],["法国","巴黎","欧洲"],["德国","柏林","欧洲"],["意大利","罗马","欧洲"],["俄罗斯","莫斯科","欧洲"],["美国","华盛顿","北美洲"],["加拿大","渥太华","北美洲"],["巴西","巴西利亚","南美洲"],["埃及","开罗","非洲"],["澳大利亚","堪培拉","大洋洲"]];
 function genGeo(){
   const push = makePush("geography", 2);
-  const allCaps=[...PROVINCES.map(x=>x[1]),...COUNTRIES.map(x=>x[1])];
+  const allCaps=[...MUNICIPALITIES,...PROVINCES.map(x=>x[1]),...COUNTRIES.map(x=>x[1])];
+  MUNICIPALITIES.forEach((m,i)=>{
+    push(`${m}是哪一类省级行政区？`, "直辖市", rot(["省","自治区","特别行政区"],i), null, 2);
+    push(`${m}的行政中心通常是哪里？`, m, rot(allCaps.filter(c=>c!==m),i), null, 2);
+  });
   PROVINCES.forEach((p,i)=>{
     push(`${p[0]}的省会城市是？`, p[1], rot(allCaps.filter(c=>c!==p[1]),i), null, 2);
     push(`${p[1]}是哪个省份的省会？`, p[0], rot(PROVINCES.map(x=>x[0]).filter(c=>c!==p[0]),i+1), null, 2);
@@ -678,14 +694,14 @@ function genGeo(){
     push(`${c[0]}在哪个大洲？`, c[2], rot(conts.filter(x=>x!==c[2]),i), null, 2);
   });
   // 名胜在哪里 (lv2)
-  const LM=[["长城","北京"],["兵马俑","西安"],["故宫","北京"],["西湖","杭州"],["东方明珠","上海"],["黄山","安徽"],["布达拉宫","西藏"],["埃菲尔铁塔","法国"],["自由女神像","美国"],["金字塔","埃及"],["大本钟","英国"],["悉尼歌剧院","澳大利亚"]];
+  const LM=[["八达岭长城","北京"],["兵马俑","西安"],["故宫","北京"],["西湖","杭州"],["东方明珠","上海"],["黄山","安徽"],["布达拉宫","西藏"],["埃菲尔铁塔","法国"],["自由女神像","美国"],["金字塔","埃及"],["大本钟","英国"],["悉尼歌剧院","澳大利亚"]];
   const lmPlaces=[...new Set(LM.map(x=>x[1]))];
   LM.forEach((l,i)=> push(`${l[0]}在哪里？`, l[1], rot(lmPlaces.filter(x=>x!==l[1]),i), null, 2));
   // 基础常识 (lv1)
   push("太阳从哪个方向升起？","东边",rot(["西边","南边","北边"],1),null,1);
   push("太阳从哪个方向落下？","西边",rot(["东边","南边","北边"],2),null,1);
   push("看地图时，上方一般是哪个方向？","北",rot(["南","东","西"],1),null,1);
-  push("中国地图像什么形状？","公鸡",rot(["大象","老虎","乌龟"],1),null,1);
+  push("常见比喻里，中国地图像什么形状？","公鸡",rot(["大象","老虎","乌龟"],1),null,1);
   push("地球上是水多还是陆地多？","水多",["水多","陆地多","一样多","没有水"],null,1);
   push("海水是什么味道？","咸的",rot(["甜的","酸的","没味道"],1),null,1);
   // 进阶常识 (lv3)
@@ -740,7 +756,7 @@ const GEO_EXTRA=[
   {q:"世界上最大的岛屿是？",a:"格陵兰岛",w:["台湾岛","海南岛","澳大利亚"],lv:3},
   {q:"位于西亚、湖水特别咸、人能浮起来的是？",a:"死海",w:["太平洋","西湖","黄河"],lv:3},
   {q:"地球上最大的雨林——亚马孙雨林，被称为地球的？",a:"绿肺",w:["眼睛","心脏","骨头"],lv:3},
-  {q:"我国领土像一只公鸡，首都北京大约在公鸡的？",a:"脖子位置(北部)",w:["脚下","尾巴","肚子最南"],lv:3},
+  {q:"常见比喻里，我国领土像一只公鸡，首都北京大约在公鸡的？",a:"脖子位置(北部)",w:["脚下","尾巴","肚子最南"],lv:3},
   {q:"海边的沙滩、海浪和贝壳，最可能在我国哪个省看到？",a:"海南",w:["山西","陕西","宁夏"],lv:1},
   {q:"我们看的世界地图上，海洋通常占的面积比陆地？",a:"大得多",w:["小得多","一样","看不见"],lv:2},
   {q:"地球内部从外到里大致分为地壳、地幔和？",a:"地核",w:["地图","地铁","海洋"],lv:3},
@@ -752,7 +768,7 @@ const GEO_EXTRA=[
 const GEO_HARD=[
   {q:"世界上最大的海洋是？",a:"太平洋",w:["大西洋","印度洋","北冰洋"],lv:2},
   {q:"世界上最高的山峰是？",a:"珠穆朗玛峰",w:["泰山","乞力马扎罗山","富士山"],lv:2},
-  {q:"世界上最长的河流是？",a:"尼罗河",w:["长江","亚马孙河","黄河"],lv:3},
+  {q:"教材里通常认为，世界上最长的河流是？",a:"尼罗河",w:["长江","亚马孙河","黄河"],lv:3},
   {q:"中国最长的河流是？",a:"长江",w:["黄河","珠江","黑龙江"],lv:2},
   {q:"中国第二长的河流（母亲河）是？",a:"黄河",w:["长江","淮河","松花江"],lv:2},
   {q:"世界上面积最大的国家是？",a:"俄罗斯",w:["中国","美国","加拿大"],lv:3},
@@ -809,7 +825,9 @@ function genBio(){
     push(`${a[0]}用什么呼吸？`, a[1], rot(breaths.filter(x=>x!==a[1]),i));
     push(`${a[0]}怎么移动？`, a[2], rot(moves.filter(x=>x!==a[2]),i+1));
     push(`${a[0]}一般住在哪里？`, a[3], rot(homes.filter(x=>x!==a[3]),i+2));
-    push(`${a[0]}有几条腿？`, a[4], rot(legs.filter(x=>x!==a[4]),i+3));
+    if(a[0]==="猴子") push("猴子通常用什么帮助爬树和活动？", a[4], rot(legs.filter(x=>x!==a[4]),i+3));
+    else if(a[0]==="袋鼠") push("袋鼠主要靠哪部分身体跳跃？", a[4], rot(legs.filter(x=>x!==a[4]),i+3));
+    else push(`${a[0]}有几条腿？`, a[4], rot(legs.filter(x=>x!==a[4]),i+3));
     push(`${a[0]}身上有什么特征？`, a[5], rot(feats.filter(x=>x!==a[5]),i+4));
   });
   // 植物常识
@@ -918,7 +936,7 @@ function genChem(){
   const tastes=[...new Set(items.map(x=>x[1]))];
   items.forEach((it,i)=> push(`${it[0]}是什么味道？`, it[1], rot(tastes.filter(t=>t!==it[1]),i), null, 1));
   const dissolve=[["盐",true],["糖",true],["沙子",false],["石头",false],["味精",true],["小石子",false],
-    ["冰糖",true],["奶粉",true],["面粉",false],["铁钉",false],["蜂蜜",true],["木屑",false]];
+    ["冰糖",true],["奶粉",true],["面粉",false],["铁钉",false],["木屑",false]];
   dissolve.forEach((d,i)=> push(`${d[0]}放进水里会溶解吗？`, d[1]?"会溶解":"不会溶解", ["会溶解","不会溶解","会爆炸","会变红"], null, 1));
   const states=[["水遇冷","结成冰"],["水加热","变成水蒸气"],["冰受热","化成水"],["水蒸气遇冷","变回水"]];
   states.forEach((s,i)=> push(`${s[0]}会怎样？`, s[1], rot(["结成冰","变成水蒸气","化成水","变回水"].filter(x=>x!==s[1]),i), null, 1));
@@ -1016,9 +1034,9 @@ const CHEM_HARD=[
 /* ---------- 物理：1-2年级常识题 + 3-6年级题库 ---------- */
 function genPhys(){
   const push = makePush("physics", 1);
-  const fs=[["木块",true],["树叶",true],["塑料瓶",true],["铁钉",false],["石头",false],["硬币",false],
+  const fs=[["木块",true],["树叶",true],["空塑料瓶",true],["铁钉",false],["石头",false],["硬币",false],
     ["乒乓球",true],["泡沫",true],["软木塞",true],["气球",true],["砖头",false],["玻璃珠",false],
-    ["小船",true],["钥匙",false],["苹果",true],["橡皮",false]];
+    ["橡皮",false]];
   fs.forEach(f=> push(`${f[0]}放进水里会怎样？`, f[1]?"浮起来":"沉下去", ["浮起来","沉下去","消失","融化"], null, 1));
   const mag=[["铁钉",true],["回形针",true],["钥匙(铁)",true],["木筷",false],["纸片",false],["橡皮",false],
     ["铁勺",true],["剪刀(铁)",true],["塑料尺",false],["玻璃杯",false],["布料",false],["铁夹子",true],
@@ -1222,12 +1240,13 @@ function genCards(){
   DATA.english.cards = ec;
 
   // —— 成语：每个成语一张卡 ——
-  const ic=[{word:"成语小课堂", say:"先读再记", mean:"📜 先读一遍成语\n再看下面的意思\n想一想能用在什么地方"}];
-  IDIOMS.forEach(([id,mean])=> ic.push({word:id, say:"成语", mean:`意思：${mean}`}));
+  const ic=[{word:"成语好词小课堂", say:"先读再记", mean:"📜 先读一遍词语\n再看下面的意思\n想一想能用在什么地方"}];
+  IDIOMS.forEach(([id,mean])=> ic.push({word:id, say:"成语好词", mean:`意思：${mean}`}));
   DATA.idiom.cards = ic;
 
   // —— 地理 ——
-  const gc=[{word:"🌍 地理小课堂", say:"认识我们的世界", mean:"先记省会和首都，再看有趣的世界知识"}];
+  const gc=[{word:"🌍 地理小课堂", say:"认识我们的世界", mean:"先记省会、直辖市和首都，再看有趣的世界知识"}];
+  MUNICIPALITIES.forEach(m=> gc.push({front:`${m} 是哪一类省级行政区？`, back:"直辖市", tag:"中国行政区", lv:2}));
   PROVINCES.forEach(([p,c])=> gc.push({front:`${p} 的省会是哪里？`, back:c, tag:"中国省会", lv:2}));
   COUNTRIES.forEach(([c,cap,cont])=> gc.push({front:`${c} 的首都是？（在${cont}）`, back:cap, tag:"世界首都", lv:2}));
   GEO_HARD.forEach(it=> gc.push(factCard(it,"地理知识")));
@@ -1240,14 +1259,14 @@ function genCards(){
   BIO_EXTRA.forEach(it=> bc.push(factCard(it,"生物趣闻")));
   DATA.biology.cards = bc;
 
-  // —— 化学 ——
-  const cc=[{word:"🧪 化学小课堂", say:"有趣的小变化", mean:"先记几条小常识：\n🧂 盐、糖能溶解在水里，沙子石头不能\n💧 水遇冷结冰，加热变水蒸气\n🔥 燃烧需要氧气，小朋友不能玩火"}];
-  CHEM_HARD.forEach(it=> cc.push(factCard(it,"化学知识")));
-  CHEM_EXTRA.forEach(it=> cc.push(factCard(it,"化学趣闻")));
+  // —— 小科学 ——
+  const cc=[{word:"🧪 小科学课堂", say:"物质和变化", mean:"先记几条小常识：\n🧂 盐、糖能溶解在水里，沙子石头不能\n💧 水遇冷结冰，加热变水蒸气\n🔥 燃烧需要氧气，小朋友不能玩火"}];
+  CHEM_HARD.forEach(it=> cc.push(factCard(it,"科学知识")));
+  CHEM_EXTRA.forEach(it=> cc.push(factCard(it,"科学趣闻")));
   DATA.chemistry.cards = cc;
 
   // —— 物理 ——
-  const pc=[{word:"🧲 物理小课堂", say:"力、光、声、电", mean:"先记几条小常识：\n🛟 轻的浮、重的沉\n🧲 磁铁能吸铁做的东西\n🌑 光被挡住就有影子"}];
+  const pc=[{word:"🧲 物理小课堂", say:"力、光、声、电", mean:"先记几条小常识：\n🛟 浮和沉跟材料、形状都有关系\n🧲 磁铁能吸铁做的东西\n🌑 光被挡住就有影子"}];
   PHYS_HARD.forEach(it=> pc.push(factCard(it,"物理知识")));
   PHYS_EXTRA.forEach(it=> pc.push(factCard(it,"物理趣闻")));
   DATA.physics.cards = pc;
@@ -1264,6 +1283,11 @@ function genCards(){
     {word:"有余数的除法", say:"分不完", mean:"🍬 7 颗糖分给 2 人，每人 3 颗，还剩 1 颗\n7÷2 = 3 余 1，剩下的就是余数"},
     {word:"周长", say:"一圈有多长", mean:"📏 正方形周长 = 边长 ×4\n边长 5 厘米，周长 = 5×4 = 20 厘米"},
     {word:"面积", say:"占多大地方", mean:"🟦 正方形面积 = 边长 × 边长\n边长 5 厘米，面积 = 5×5 = 25 平方厘米"},
+    {word:"排队问题", say:"别忘自己", mean:"🚶 前面4人，后面3人，一共是 4+1+3=8 人\n排队题里要把自己也算进去"},
+    {word:"剪绳问题", say:"剪一刀多一段", mean:"✂️ 一根绳子剪1刀变2段，剪2刀最多变3段\n每剪一刀，通常多出一段"},
+    {word:"比大小", say:"先看数值", mean:"⚖️ 两个数比大小，先找更大的数\n6 比 4 大，4 比 6 小"},
+    {word:"逆推法", say:"倒着算", mean:"🔙 一个数加3等于10，就倒着算 10-3=7\n遇到“不知道原来是多少”，可以从结果往回推"},
+    {word:"找规律进阶", say:"看差多少", mean:"🔢 2,5,8,11 每次多3\n先看相邻两个数相差多少，再推出下一个"}
   ]);
 }
 
@@ -1668,6 +1692,18 @@ function renderParent(){
     .slice()
     .sort((a,b)=>(b.wrong-a.wrong) || ((a.rate??101)-(b.rate??101)) || (b.attempts-a.attempts))
     .slice(0,3);
+  const weakQuestions = [];
+  for(const key in DATA){
+    const qstats = store.qstats[key] || {};
+    for(const idx in qstats){
+      const st = qstats[idx];
+      const q = DATA[key].questions[Number(idx)];
+      if(q && st.wrongs>0 && !st.mastered){
+        weakQuestions.push({subject:DATA[key].name, question:q.q, wrongs:st.wrongs});
+      }
+    }
+  }
+  weakQuestions.sort((a,b)=>b.wrongs-a.wrongs);
   const rows = stats.map(s=>`
     <tr>
       <td>${s.name}</td>
@@ -1679,6 +1715,9 @@ function renderParent(){
   const weakText = weak.length
     ? `建议优先练：${weak.map(s=>`${s.name}${s.wrong?`（错题${s.wrong}）`:""}`).join("、")}。`
     : "还没有练习记录。先让孩子每天完成 10 题，系统会慢慢看出薄弱科目。";
+  const weakDetail = weakQuestions.length
+    ? `薄弱题点：${weakQuestions.slice(0,5).map(x=>`${x.subject}「${x.question.replace(/<[^>]+>/g,"").slice(0,24)}」错${x.wrongs}次`).join("；")}。`
+    : "暂时还没有具体薄弱题点。";
   document.getElementById("parentCard").innerHTML = `
     <div class="mode-title">家长查看</div>
     <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · ${cloudLabel()}</div>
@@ -1692,8 +1731,50 @@ function renderParent(){
       <thead><tr><th>科目</th><th>答题</th><th>正确率</th><th>错题</th><th>已会</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
-    <div class="parent-note">${weakText}</div>
+    <div class="parent-note">${weakText}<br>${weakDetail}<br>错题规则：同一道题连续答对 5 次后，会自动归入“已学会”，并从错题本里移除。</div>
+    <button class="nextbtn show" onclick="exportProgress()" style="background:linear-gradient(135deg,#4a90e2,#56ccf2);margin-top:12px;margin-bottom:10px;">导出学习记录</button>
+    <button class="nextbtn show" onclick="document.getElementById('importProgressFile').click()" style="background:#cfd9e2;color:#33414f;margin-top:0;">导入学习记录</button>
+    <input id="importProgressFile" type="file" accept="application/json" style="display:none" onchange="importProgress(event)">
   `;
+}
+
+function exportProgress(){
+  const payload = {
+    app:"xueba",
+    version:1,
+    exportedAt:new Date().toISOString(),
+    profile:activeProfile,
+    store
+  };
+  const blob = new Blob([JSON.stringify(payload,null,2)], {type:"application/json"});
+  const a = document.createElement("a");
+  const name = activeProfile?.id || "guest";
+  a.href = URL.createObjectURL(blob);
+  a.download = `xueba-progress-${name}-${todayKey()}.json`;
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 500);
+}
+
+function importProgress(event){
+  const file = event.target.files && event.target.files[0];
+  event.target.value = "";
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const payload = JSON.parse(reader.result);
+      const nextStore = payload.store || payload;
+      if(!nextStore || typeof nextStore!=="object") throw new Error("bad store");
+      if(!confirm("导入后会覆盖当前孩子在本机的学习记录，确定继续吗？")) return;
+      store = normalizeStore(nextStore);
+      save();
+      renderParent();
+      alert("学习记录已导入");
+    }catch(e){
+      alert("导入失败：请选择之前导出的学习记录 JSON 文件");
+    }
+  };
+  reader.readAsText(file);
 }
 
 function openSubject(key){
