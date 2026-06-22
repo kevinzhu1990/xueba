@@ -1368,19 +1368,80 @@ function buildAll(){
    - 知识卡 {front, back, tag}     （地理/生物/化学/物理/阅读 等知识点）
    每个学科开头保留几张「方法/导读」卡，后面接全部知识卡。 */
 function factCard(it, tag){ return {front: it.q, back: it.a, tag: tag||"知识点", lv: it.lv||1}; }
+function wordCard(word, say, mean){ return {word, say, mean}; }
+function studyCard(front, back, tag, lv){ return {front, back, tag:tag||"学习方法", lv:lv||1}; }
+
+const STUDY_GUIDES = {
+  english:[
+    wordCard("英语先学什么", "学习路线", "① 先看图和中文意思\n② 点 🔊 听单词读音\n③ 跟读 2 遍\n④ 再去做选择题"),
+    wordCard("记单词小方法", "听、看、说", "看到 apple，不只记字母，还要想到 🍎 苹果。\n听一遍，自己说一遍，最后遮住中文回想意思。"),
+    wordCard("首字母很重要", "拼写基础", "cat 的第一个字母是 C。\n做首字母题时，先慢慢读出单词，再看开头发音。"),
+    wordCard("同类一起记", "分类记忆", "动物、颜色、食物、时间、职业分开学。\n同一类词放在一起，更容易比较和记住。")
+  ],
+  idiom:[
+    wordCard("成语先懂意思", "不是死背", "先读成语，再看意思，最后想一个生活里的例子。\n例如：做题很认真，可以说“一丝不苟”。"),
+    wordCard("填字题怎么做", "看前后字", "补全成语时，先把已经给出的字连起来读一遍。\n如果读起来熟悉，再从选项里找最顺口、最合理的字。"),
+    wordCard("成语怎么用", "造句练习", "学完一个成语，可以试着说一句话。\n例如：他每天练字，持之以恒，进步很快。"),
+    wordCard("好词积累", "写作准备", "成语好词不是只为考试，也能让作文更生动。\n描写风景可用“山清水秀”，描写安静可用“鸦雀无声”。")
+  ],
+  math:[
+    studyCard("加减法先看清题意", "看见“一共、又买、增加”，多半用加法。\n看见“还剩、送出、少了”，多半用减法。", "加减法", 1),
+    studyCard("乘法表示几个几", "3 个盘子，每盘 4 块饼干，就是 3 个 4。\n可以列式 3×4=12。", "乘法", 2),
+    studyCard("除法表示平均分", "24 个苹果平均分给 6 人，就是 24÷6。\n想：几乘 6 等于 24？答案是 4。", "除法", 2),
+    studyCard("周长和面积别混", "周长是一圈有多长，用长度单位。\n面积是占多大地方，用平方单位。", "图形", 3),
+    studyCard("找规律先看变化", "数列题先看相邻两个数差多少，或者是不是每次乘同一个数。\n3,6,12,24 是每次乘 2。", "找规律", 3),
+    studyCard("应用题三步法", "第一步圈出数字，第二步找关键词，第三步列式计算。\n算完要把答案放回题目里检查是否合理。", "应用题", 2)
+  ],
+  reading:[
+    wordCard("阅读三步", "先读再答", "① 第一遍读懂谁在做什么\n② 第二遍找题目问的句子\n③ 答完回到原文检查"),
+    wordCard("找关键词", "定位答案", "题目问“什么时候”，就找时间词。\n题目问“为什么”，就找原因句。"),
+    wordCard("概括主要内容", "谁 + 做什么", "短文主要内容常常可以用“谁做了什么，结果怎样”来概括。"),
+    wordCard("推理题", "从文中找依据", "有些答案不会原句出现，要根据短文里的行为和结果来判断。")
+  ],
+  geography:[
+    wordCard("地理学什么", "位置和环境", "地理帮助我们认识方向、地图、城市、国家、河流、山脉和气候。"),
+    studyCard("方向基础", "地图上通常是上北下南、左西右东。\n指南针能帮助我们辨别南北方向。", "方向与地图", 1),
+    studyCard("省会和首都", "省会是一个省的行政中心。\n首都是一个国家的政治中心，例如中国首都是北京。", "行政区与首都", 2),
+    studyCard("地球运动", "地球自转带来白天和黑夜。\n地球绕太阳公转，与四季变化有关。", "地球运动", 3),
+    studyCard("地形地貌", "平原较平坦，高原海拔高，山地起伏大，沙漠干旱少水。", "地形地貌", 2)
+  ],
+  biology:[
+    wordCard("生物学什么", "动物、植物和人体", "生物课认识生命：动物怎样生活，植物怎样生长，人体怎样保持健康。"),
+    studyCard("动物分类观察", "观察动物时可以看：怎么呼吸、怎么移动、住在哪里、身体有什么特征。", "动物特征", 1),
+    studyCard("植物的根茎叶", "根吸水，茎运输，叶子能进行光合作用，花和种子帮助繁殖。", "植物常识", 2),
+    studyCard("食物链", "绿色植物能制造养分，草食动物吃植物，肉食动物吃其他动物。", "食物链", 3),
+    studyCard("健康习惯", "饭前便后洗手，保护牙齿和眼睛，打喷嚏遮住口鼻，能减少疾病传播。", "身体健康", 1)
+  ],
+  chemistry:[
+    wordCard("小科学学什么", "物质和变化", "小科学先从生活现象学起：水会结冰，糖能溶解，铁会生锈。"),
+    studyCard("水的三态", "水可以是液态的水、固态的冰、气态的水蒸气。\n遇冷和加热会让状态改变。", "水和物态变化", 1),
+    studyCard("溶解和分离", "盐和糖能溶解在水里，沙子不容易溶解。\n过滤、蒸发、磁铁都能帮助分离物质。", "溶解", 2),
+    studyCard("空气和燃烧", "燃烧需要氧气。二氧化碳常用来灭火，因为它不支持燃烧。", "空气与气体", 3),
+    studyCard("实验安全", "不能玩火，不能直接闻未知气味，不能湿手碰电，实验要听老师安排。", "实验安全", 1)
+  ],
+  physics:[
+    wordCard("物理学什么", "力、光、声、电", "物理解释生活里的现象：为什么会有影子，声音怎么传，磁铁能吸什么。"),
+    studyCard("浮和沉", "轻的不一定浮，重的不一定沉。\n物体能不能浮起来，和材料、形状、受到的浮力有关。", "浮和沉", 1),
+    studyCard("磁铁", "磁铁能吸铁一类材料。\n同名磁极相互排斥，异名磁极相互吸引。", "磁铁", 2),
+    studyCard("光和影子", "光沿直线传播，不透明物体挡住光就会形成影子。\n镜子能反射光。", "光和影子", 2),
+    studyCard("声音", "声音来自物体振动，需要空气、水等物质传播。\n在真空里声音不能传播。", "声音", 3),
+    studyCard("用电安全", "湿手不能碰插座，电路要闭合小灯泡才会亮。\n金属容易导电，橡胶、塑料常是绝缘体。", "电", 2)
+  ]
+};
+
 function genCards(){
   // —— 英语：每个单词一张卡（覆盖全部词汇）——
-  const ec=[{word:"英语小课堂", say:"开始学单词啦", mean:"📖 看图片，记单词\n🔊 点喇叭可以听读音\n每个单词都会在测试里考到哦"}];
+  const ec=[...STUDY_GUIDES.english];
   for(const cat in EN) EN[cat].forEach(([en,zh,emo])=> ec.push({word:en, say:cat, mean:`${emo} ${zh}`}));
   DATA.english.cards = ec;
 
   // —— 成语：每个成语一张卡 ——
-  const ic=[{word:"成语好词小课堂", say:"先读再记", mean:"📜 先读一遍词语\n再看下面的意思\n想一想能用在什么地方"}];
+  const ic=[...STUDY_GUIDES.idiom];
   IDIOMS.forEach(([id,mean])=> ic.push({word:id, say:"成语好词", mean:`意思：${mean}`}));
   DATA.idiom.cards = ic;
 
   // —— 地理 ——
-  const gc=[{word:"🌍 地理小课堂", say:"认识我们的世界", mean:"先记省会、直辖市和首都，再看有趣的世界知识"}];
+  const gc=[...STUDY_GUIDES.geography];
   MUNICIPALITIES.forEach(m=> gc.push({front:`${m} 是哪一类省级行政区？`, back:"直辖市", tag:"中国行政区", lv:2}));
   PROVINCES.forEach(([p,c])=> gc.push({front:`${p} 的省会是哪里？`, back:c, tag:"中国省会", lv:2}));
   COUNTRIES.forEach(([c,cap,cont])=> gc.push({front:`${c} 的首都是？（在${cont}）`, back:cap, tag:"世界首都", lv:2}));
@@ -1389,30 +1450,30 @@ function genCards(){
   DATA.geography.cards = gc;
 
   // —— 生物 ——
-  const bc=[{word:"🐢 生物小课堂", say:"动物和植物", mean:"认识动物怎么呼吸、住在哪，还有很多有趣的小知识"}];
+  const bc=[...STUDY_GUIDES.biology];
   ANIMALS.forEach(a=> bc.push({front:`${a[0]} 是什么样的动物？`, back:`${a[1]}、${a[2]}、住在${a[3]}、${a[4]}、${a[5]}`, tag:"动物档案", lv:1}));
   BIO_EXTRA.forEach(it=> bc.push(factCard(it,"生物趣闻")));
   DATA.biology.cards = bc;
 
   // —— 小科学 ——
-  const cc=[{word:"🧪 小科学课堂", say:"物质和变化", mean:"先记几条小常识：\n🧂 盐、糖能溶解在水里，沙子石头不能\n💧 水遇冷结冰，加热变水蒸气\n🔥 燃烧需要氧气，小朋友不能玩火"}];
+  const cc=[...STUDY_GUIDES.chemistry];
   CHEM_HARD.forEach(it=> cc.push(factCard(it,"科学知识")));
   CHEM_EXTRA.forEach(it=> cc.push(factCard(it,"科学趣闻")));
   DATA.chemistry.cards = cc;
 
   // —— 物理 ——
-  const pc=[{word:"🧲 物理小课堂", say:"力、光、声、电", mean:"先记几条小常识：\n🛟 浮和沉跟材料、形状都有关系\n🧲 磁铁能吸铁做的东西\n🌑 光被挡住就有影子"}];
+  const pc=[...STUDY_GUIDES.physics];
   PHYS_HARD.forEach(it=> pc.push(factCard(it,"物理知识")));
   PHYS_EXTRA.forEach(it=> pc.push(factCard(it,"物理趣闻")));
   DATA.physics.cards = pc;
 
   // —— 阅读：每篇短文一张卡（先读，再去测）——
-  const rc=[{word:"📚 阅读小课堂", say:"读短文的窍门", mean:"① 慢慢读一遍\n② 想想讲了谁、做了什么\n③ 再去测试里回答问题"}];
+  const rc=[...STUDY_GUIDES.reading];
   allPassages().forEach((p,i)=> rc.push({front:`第 ${i+1} 篇 · 读一读`, back:p[0], tag:"短文阅读", lv:p[2]||1}));
   DATA.reading.cards = rc;
 
-  // —— 奥数：保留方法卡，补充乘除与图形公式 ——
-  DATA.math.cards = DATA.math.cards.concat([
+  // —— 奥数：补充方法卡 + 应用题讲解卡 ——
+  DATA.math.cards = DATA.math.cards.concat(STUDY_GUIDES.math, [
     {word:"乘法口诀", say:"二年级", mean:"✖️ 3×4 表示 4 个 3 相加\n3×4 = 3+3+3+3 = 12\n背熟九九乘法表算得快"},
     {word:"除法", say:"平均分", mean:"➗ 12÷3 就是把 12 平均分成 3 份\n每份是 4。它和 3×4=12 是一对好朋友"},
     {word:"有余数的除法", say:"分不完", mean:"🍬 7 颗糖分给 2 人，每人 3 颗，还剩 1 颗\n7÷2 = 3 余 1，剩下的就是余数"},
@@ -1424,6 +1485,7 @@ function genCards(){
     {word:"逆推法", say:"倒着算", mean:"🔙 一个数加3等于10，就倒着算 10-3=7\n遇到“不知道原来是多少”，可以从结果往回推"},
     {word:"找规律进阶", say:"看差多少", mean:"🔢 2,5,8,11 每次多3\n先看相邻两个数相差多少，再推出下一个"}
   ]);
+  MATH_EXTRA.forEach(it=> DATA.math.cards.push({front:it.q, back:`答案：${it.a}\n先找题目里的数量关系，再列式计算。`, tag:"应用题讲解", lv:it.lv||1}));
 }
 
 /* ============== 家长账号 / 孩子档案 / 本地与云端存储 ============== */
@@ -2176,7 +2238,7 @@ function renderLearn(){
     (learnIdx===learnCards.length-1)? "学完啦，去测一测 →" : "下一张 →";
 }
 document.getElementById("learnNext").onclick = ()=>{
-  if(learnIdx===learnCards.length-1){ go("modeScreen"); }
+  if(learnIdx===learnCards.length-1){ openSetup(); }
   else { learnIdx++; renderLearn(); }
 };
 
