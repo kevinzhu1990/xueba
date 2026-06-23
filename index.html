@@ -1610,6 +1610,51 @@ function mergeChildren(localList, remoteList){
   (localList||[]).forEach(c=>map.set(c.id,{...map.get(c.id),...c}));
   return [...map.values()].sort((a,b)=>String(a.createdAt||"").localeCompare(String(b.createdAt||"")));
 }
+// 检测本机孩子ID与云端不匹配但名字相同的情况（多设备各自建档导致），提示合并
+async function promptMergeOrphanChildren(localList, remoteList, parentUid){
+  const DONE_KEY='xueba_orphan_merge_v1';
+  const done=new Set(JSON.parse(localStorage.getItem(DONE_KEY)||'[]'));
+  const remoteIds=new Set((remoteList||[]).map(c=>c.id));
+  const orphans=(localList||[]).filter(c=>!remoteIds.has(c.id)&&!done.has(c.id));
+  if(!orphans.length) return localList;
+  let list=[...localList];
+  let anyMerged=false;
+  for(const orphan of orphans){
+    done.add(orphan.id);
+    const match=(remoteList||[]).find(c=>c.name===orphan.name);
+    if(!match) continue;
+    const localKey=profileSaveKey({id:orphan.id,parentUid});
+    let localProg; try{localProg=normalizeStore(JSON.parse(localStorage.getItem(localKey)||'{}'));}catch(e){localProg=normalizeStore({});}
+    const useful=(localProg.stars||0)+Object.values(localProg.history||{}).reduce((s,h)=>s+(h.attempts||0),0);
+    if(!useful) continue;
+    if(!confirm(`检测到本机有孩子「${orphan.name}」的学习记录（⭐${localProg.stars||0}，已答题约${useful}次）。\n\n云端同一账号也有同名孩子档案，这是在其他设备上建的。\n\n是否将本机记录合并到云端档案，实现跨设备同步？`)) continue;
+    try{
+      let cloudProg={};
+      if(cloudOn()){
+        const r=await fetch(api('/api/progress?child='+encodeURIComponent(match.id)),{headers:authHeaders(),cache:'no-store'});
+        if(r.ok){const d=await r.json();cloudProg=d.store||{};}
+      }
+      const merged=mergeStores(normalizeStore(cloudProg),localProg);
+      if(cloudOn()) await fetch(api('/api/progress'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({childId:match.id,store:merged})});
+      const newKey=profileSaveKey({id:match.id,parentUid});
+      const existing=normalizeStore(JSON.parse(localStorage.getItem(newKey)||'{}'));
+      localStorage.setItem(newKey,JSON.stringify(mergeStores(existing,merged)));
+      localStorage.setItem(localKey+'_merged_backup_'+Date.now(),localStorage.getItem(localKey)||'{}');
+      localStorage.removeItem(localKey);
+      // 如果当前激活档案指向的是旧orphan，更新到云端child ID
+      const ap=loadProfile();
+      if(ap&&ap.id===orphan.id&&ap.parentUid===parentUid){
+        localStorage.setItem(PROFILE_KEY,JSON.stringify({...ap,id:match.id}));
+      }
+      list=list.filter(c=>c.id!==orphan.id);
+      anyMerged=true;
+      alert(`「${orphan.name}」的本机学习记录已合并到云端档案 ✓\n以后在所有设备登录同一账号，进度会自动同步。`);
+    }catch(e){console.error('merge orphan failed',e);}
+  }
+  localStorage.setItem(DONE_KEY,JSON.stringify([...done]));
+  if(anyMerged) saveLocalChildren(parentUid,list);
+  return list;
+}
 async function createChildProfile(parentUid, childData){
   const now=new Date().toISOString();
   const child={id:childData.id||(`child_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`),name:childData.name,grade:childData.grade===''?null:Number(childData.grade),avatar:childData.avatar||AVATARS[0],stars:0,createdAt:now,updatedAt:now,lastStudyAt:''};
@@ -1631,6 +1676,7 @@ async function getChildren(parentUid){
       if(res.ok){
         const d=await res.json();
         if(Array.isArray(d.children)){
+          list=await promptMergeOrphanChildren(list,d.children,parentUid);
           list=mergeChildren(list,d.children);
           saveLocalChildren(parentUid,list);
           if(list.length && d.children.length < list.length) pushChildren(parentUid);
