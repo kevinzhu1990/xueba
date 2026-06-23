@@ -1502,6 +1502,10 @@ const CLOUD_API = "https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run";
 function api(p){ return CLOUD_API.replace(/\/$/,'') + p; }
 function authHeaders(){ const h={'Content-Type':'application/json'}; if(currentParent&&currentParent.token) h['Authorization']='Bearer '+currentParent.token; return h; }
 function cloudOn(){ return !!(CLOUD_API && currentParent && currentParent.token); }
+function cloudErrorMessage(action, status, data){
+  if(status>=500) return "阿里云服务器当前异常（"+status+"），暂时无法"+action+"。这不是密码问题，请稍后再试；也可以先用游客体验。";
+  return (data&&data.error) || (action+"失败");
+}
 
 let cloudTimer = null;
 let cloudState = "local";
@@ -1533,8 +1537,8 @@ async function registerParent(email, password, displayName){
   if(CLOUD_API){
     let res, data;
     try{ res=await fetch(api('/api/register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:email,password,displayName})}); data=await res.json().catch(()=>({})); }
-    catch(e){ throw new Error('连不上服务器，请检查网络后重试'); }
-    if(!res.ok) throw new Error(data.error||'注册失败');
+    catch(e){ throw new Error('连不上阿里云服务器，请检查网络后重试；也可以先用游客体验'); }
+    if(!res.ok) throw new Error(cloudErrorMessage('注册', res.status, data));
     const parent={uid:email,email,displayName:data.displayName||displayName,token:data.token,role:'parent'};
     currentParent=parent; saveParentSession(parent); firebaseReady=true; cloudState='synced'; return parent;
   }
@@ -1550,8 +1554,8 @@ async function loginParent(email, password){
   if(CLOUD_API){
     let res, data;
     try{ res=await fetch(api('/api/login'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:email,password})}); data=await res.json().catch(()=>({})); }
-    catch(e){ throw new Error('连不上服务器，请检查网络后重试'); }
-    if(!res.ok) throw new Error(data.error||'登录失败');
+    catch(e){ throw new Error('连不上阿里云服务器，请检查网络后重试；也可以先用游客体验'); }
+    if(!res.ok) throw new Error(cloudErrorMessage('登录', res.status, data));
     const parent={uid:email,email,displayName:data.displayName||'家长',token:data.token,role:'parent'};
     currentParent=parent; saveParentSession(parent); firebaseReady=true; cloudState='synced'; return parent;
   }
