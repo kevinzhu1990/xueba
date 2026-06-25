@@ -1730,7 +1730,7 @@ async function syncFromCloud(){
     const res=await fetch(api('/api/progress?child='+encodeURIComponent(currentChild.id)),{headers:authHeaders(),cache:'no-store'});
     if(res.ok){
       const d=await res.json(); const remote=normalizeStore(d.store||{});
-      const remoteTime=Date.parse(remote.updatedAt||0), localTime=Date.parse(store.updatedAt||0);
+      const remoteTime=remote.updatedAt?Date.parse(remote.updatedAt):0, localTime=store.updatedAt?Date.parse(store.updatedAt):0;
       if(remoteTime>localTime){ store=remote; saveLocalOnly(); }
       else if(localTime>remoteTime){ await syncToCloud(true); }
       cloudState='synced';
