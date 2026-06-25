@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="学习乐园">
 <meta name="theme-color" content="#ffe1cf">
 <meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.json">
 <title>小学霸学习乐园</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent;
@@ -205,6 +206,7 @@
         <button class="startbtn" onclick="loginParentUI()">家长登录 →</button>
         <button class="startbtn" onclick="registerParentUI()" style="margin-top:10px;background:linear-gradient(135deg,#4a90e2,#56ccf2)">注册家长账号</button>
         <button class="plain-link" onclick="startGuest()">游客体验</button>
+        <button class="plain-link" onclick="forgotPassword()" style="color:#9aa7b4;font-size:13px;margin-top:4px">忘记密码？</button>
         <div class="auth-tip">未配置 Firebase 时，会使用本机家长账号模式；配置 Firebase 后自动启用云端账号和学习记录。</div>
       </div>
     </div>
@@ -240,9 +242,8 @@
   <div id="home" class="screen">
     <div class="topbar">
       <h1>🎒 小学霸乐园</h1>
-      <button id="profileBtn" class="profile-chip" onclick="switchChild()" title="切换孩子"></button>
+      <button id="profileBtn" class="profile-chip" onclick="switchChild()" title="切换孩子/退出"></button>
       <button class="profile-chip" onclick="openParentGate()" title="家长查看">家长</button>
-      <button class="profile-chip" onclick="logoutParent()" title="退出登录">退出</button>
       <button id="soundBtn" class="sound-btn" onclick="toggleSound()" title="声音开关">🔊</button>
       <div class="star-box">⭐ <span id="totalStars">0</span></div>
     </div>
@@ -696,7 +697,7 @@ const IDIOMS=[
   ["小心翼翼","非常谨慎小心"],["孤陋寡闻","见识少懂得少"],["津津有味","很有兴趣很享受"],
   ["默默无闻","不出名不为人知"],["废寝忘食","顾不上吃饭睡觉地努力"],["全神贯注","注意力非常集中"],
   ["络绎不绝","来来往往接连不断"],["四面八方","各个方向各个地方"],["和睦相处","友好地在一起生活"],
-  ["взаимно","",""].slice(0,0).length?[]:["与众不同","跟别人不一样很特别"],
+  ["与众不同","跟别人不一样很特别"],
   ["一帆风顺","非常顺利没有挫折"],["万里无云","天空很晴朗"],["不约而同","没商量却做了一样的事"],
   ["争先恐后","抢着向前唯恐落后"],["大公无私","为大家着想没有私心"],["低头丧气","情绪低落没精神"],
   ["东张西望","到处看来看去"],["风和日丽","风轻日暖天气好"],["欢天喜地","非常欢喜快乐"],
@@ -705,7 +706,7 @@ const IDIOMS=[
   ["狼吞虎咽","吃东西又急又快"],["了如指掌","对情况非常清楚"],["满载而归","收获很多回来"],
   ["名列前茅","成绩排在前面"],["拿手好戏","最擅长的本领"],["全力以赴","用尽全部力量去做"],
   ["如愿以偿","愿望实现了"],["神采奕奕","精神饱满有神气"],["十拿九稳","很有把握"],
-  ["谈笑风生","谈话有说有笑很轻松"],["temp","",""].slice(0,0).length?[]:["亭亭玉立","身材修长美丽"],
+  ["谈笑风生","谈话有说有笑很轻松"],["亭亭玉立","身材修长美丽"],
   ["完好无损","完整没有损坏"],["心花怒放","非常高兴"],["一鸣惊人","平时不显眼一下子很出色"],
   ["与日俱增","随着时间一天天增多"],["源源不断","连续不断地到来"],["朝气蓬勃","充满活力和生气"],
   ["争分夺秒","抓紧每一分一秒"],["专心一意","一心一意不分心"],["自由自在","无拘无束很舒服"],
@@ -1589,7 +1590,13 @@ function normalizeStore(s){
   s.answerRecords = Array.isArray(s.answerRecords)? s.answerRecords : [];
   s.dailyStats = s.dailyStats || {}; s.streak = Number(s.streak)||0; s.lastStudy = s.lastStudy || ''; s.updatedAt = s.updatedAt || '';
   s.sound = (s.sound===undefined)? true : !!s.sound; s.grade = (s.grade===undefined)? null : s.grade;
-  s.recent = Array.isArray(s.recent)? s.recent : []; s.tagstats = s.tagstats || {}; return s;
+  s.recent = Array.isArray(s.recent)? s.recent : []; s.tagstats = s.tagstats || {};
+  // 只保留最近 180 天的每日记录，防止 localStorage 无限增长
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 180);
+  const cutStr = cutoff.toISOString().slice(0,10);
+  if(s.days) Object.keys(s.days).forEach(k=>{ if(k < cutStr) delete s.days[k]; });
+  if(s.dailyStats) Object.keys(s.dailyStats).forEach(k=>{ if(k < cutStr) delete s.dailyStats[k]; });
+  return s;
 }
 function cloudEnabled(){ return !!(cloudOn() && currentChild); }
 function cloudLabel(){ if(!CLOUD_API || !currentParent) return '📱 本机保存'; return cloudState==='synced'?'☁️ 云端已同步':cloudState==='syncing'?'☁️ 同步中…':'📱 本机缓存'; }
@@ -1759,6 +1766,23 @@ function getWeakTags(){ return window.getWeakTags ? window.getWeakTags() : []; }
 const learningRecordService={saveAnswerRecord,saveWrongQuestion,updateDailyStats,getChildStats,getWrongQuestions,getWeakTags};
 const reportService={getParentDashboard:()=>getParentReport(),getChildReport:()=>getParentReport(),getTodayStats:()=>store.days[todayKey()]||{attempts:0,correct:0},getSubjectAccuracy:subjectStats,getWeakKnowledgeTags:getWeakTags};
 
+function forgotPassword(){
+  if(CLOUD_API){
+    alert('如忘记密码，请重新注册一个新账号，或使用游客模式体验。\n如需找回已有云端数据，请联系管理员。');
+    return;
+  }
+  const email = prompt('请输入已注册的家长邮箱：');
+  if(!email) return;
+  const key = String(email).trim().toLowerCase();
+  const accounts = localParentAccounts();
+  if(!accounts[key]){ alert('该邮箱尚未注册。'); return; }
+  const newPwd = prompt('请输入新密码（至少 6 位）：');
+  if(!newPwd || newPwd.length < 6){ alert('密码至少需要 6 位，未重置。'); return; }
+  accounts[key].passwordToken = localPasswordToken(newPwd);
+  saveLocalParentAccounts(accounts);
+  alert('密码已重置！请用新密码登录。');
+}
+
 async function loginParentUI(){
   const err=document.getElementById('loginError'); err.textContent='正在登录...';
   try{ await loginParent(document.getElementById('parentEmail').value, document.getElementById('parentPassword').value); await renderChildScreen(); }
@@ -1789,8 +1813,6 @@ async function createChildUI(){
 }
 function switchChild(){ if(currentParent) renderChildScreen(); else logoutParent(); }
 function openParentDashboard(){ renderParent(); go('parentScreen'); }
-function openParentGate(){ if(currentParent){ renderParent(); go('parentScreen'); return; } const code=prompt('请输入家庭码查看游客学习情况：'); if(code===null) return; if(code.trim()!==FAMILY_CODE){ alert('家庭码不对'); return; } renderParent(); go('parentScreen'); }
-function parentBack(){ go(currentParent ? 'childScreen' : activeProfile ? 'home' : 'authScreen'); }
 
 async function promptMigrateLegacyProgress(){
   const candidates = [];
