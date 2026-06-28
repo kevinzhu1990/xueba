@@ -184,6 +184,24 @@
   .parent-box span{ display:block; color:#7c8a98; font-size:12px; margin-top:4px; font-weight:750; }
   .parent-note{ background:#fff8df; color:#7b5a00; border-radius:16px; padding:14px; line-height:1.55;
     font-size:15px; font-weight:750; margin-top:12px; }
+  .member-panel{ background:linear-gradient(135deg,#fff7e6,#eef8ff); border:3px solid #edf3f8; border-radius:18px; padding:14px; margin:14px 0; }
+  .member-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .member-title{ font-size:18px; font-weight:900; color:#33414f; }
+  .member-badge{ background:#33414f; color:#fff; border-radius:999px; padding:7px 12px; font-weight:900; font-size:13px; }
+  .member-badge.free{ background:#9aa7b4; }
+  .member-desc{ color:#6f7f8f; font-size:14px; font-weight:750; line-height:1.55; margin-top:8px; }
+  .member-plans{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+  .member-plan{ background:#fff; border:2px solid #e6edf4; border-radius:14px; padding:10px; color:#33414f; font-weight:900; }
+  .member-plan small{ display:block; color:#7c8a98; font-size:12px; margin-top:4px; font-weight:750; word-break:break-all; }
+  .redeem-row{ display:flex; gap:8px; margin-top:12px; }
+  .redeem-row input{ flex:1; min-width:0; }
+  .redeem-row button{ width:118px; border:0; border-radius:16px; background:linear-gradient(135deg,#4a90e2,#56ccf2); color:#fff; font-weight:900; font-size:16px; }
+  .member-msg{ margin-top:8px; color:#d63b3b; font-weight:850; text-align:center; min-height:20px; }
+  @media (max-width:560px){
+    .member-plans{ grid-template-columns:1fr; }
+    .redeem-row{ flex-direction:column; }
+    .redeem-row button{ width:100%; padding:14px; }
+  }
 </style>
 </head>
 <body>
@@ -218,6 +236,7 @@
     <div class="card">
       <div class="mode-title">选择孩子档案</div>
       <div class="mode-sub" id="parentAccountInfo"></div>
+      <div id="memberPanel" class="member-panel"></div>
       <div id="childList" class="modebtns"></div>
       <div class="setup-label">新增 / 编辑孩子</div>
       <input id="childNameInput" class="auth-input" maxlength="12" placeholder="孩子昵称">
@@ -1553,6 +1572,15 @@ const LOCAL_PARENT_KEY = "xueba_local_parent_accounts_v1";
 const LOCAL_CHILDREN_KEY = "xueba_local_children_v1";
 const FAMILY_CODE = "xueba2026";
 const AVATARS = ["🧒","👧","👦","🐣","🌟","🚀","🦄","🐼"];
+const MEMBERSHIP_KEY = "xueba_membership_v1";
+const REDEEM_CODES = {
+  YUEKA2026: {plan:"month", label:"月卡", days:31, fee:"按月收费"},
+  "XUEBA-MONTH-2026": {plan:"month", label:"月卡", days:31, fee:"按月收费"},
+  JIKA2026: {plan:"quarter", label:"季卡", days:93, fee:"季度收费"},
+  "XUEBA-QUARTER-2026": {plan:"quarter", label:"季卡", days:93, fee:"季度收费"},
+  NIANKA2026: {plan:"year", label:"年卡", days:366, fee:"年度收费"},
+  "XUEBA-YEAR-2026": {plan:"year", label:"年卡", days:366, fee:"年度收费"}
+};
 
 // 云端后端：阿里云函数计算（国内可访问）。家长账号、孩子档案、学习进度都存这里。
 const CLOUD_API = "https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run";
@@ -1587,6 +1615,87 @@ function localPasswordToken(password){ return btoa(unescape(encodeURIComponent(S
 function parentUidFromEmail(email){ return 'local_'+profileId(email); }
 function loadParentSession(){ try{return JSON.parse(localStorage.getItem(PARENT_SESSION_KEY)||'null');}catch(e){return null;} }
 function saveParentSession(parent){ parent ? localStorage.setItem(PARENT_SESSION_KEY, JSON.stringify(parent)) : localStorage.removeItem(PARENT_SESSION_KEY); }
+function loadMembershipMap(){ try{return JSON.parse(localStorage.getItem(MEMBERSHIP_KEY)||"{}");}catch(e){return{};} }
+function saveMembershipMap(map){ localStorage.setItem(MEMBERSHIP_KEY, JSON.stringify(map)); }
+function memberOwnerKey(){ return currentParent?.uid || currentParent?.email || "guest"; }
+function dateText(iso){ if(!iso) return ""; const d=new Date(iso); return isNaN(d.getTime()) ? "" : d.toLocaleDateString("zh-CN"); }
+function currentMembership(){
+  const m = loadMembershipMap()[memberOwnerKey()] || null;
+  if(!m) return null;
+  const expires = Date.parse(m.expiresAt||"");
+  return isNaN(expires) ? null : m;
+}
+function activeMembership(){
+  const m = currentMembership();
+  return m && Date.parse(m.expiresAt) > Date.now() ? m : null;
+}
+function redeemMembershipCode(raw){
+  const code = String(raw||"").trim().toUpperCase();
+  const item = REDEEM_CODES[code];
+  if(!item) throw new Error("兑换码不正确，请检查大小写和横线。");
+  const map = loadMembershipMap();
+  const old = map[memberOwnerKey()] || {};
+  const usedCodes = Array.isArray(old.usedCodes) ? old.usedCodes : [];
+  if(usedCodes.includes(code)) throw new Error("这个兑换码已经兑换过了，请换一个新的兑换码。");
+  const oldExpires = Date.parse(old.expiresAt||"");
+  const baseMs = Math.max(Date.now(), isNaN(oldExpires) ? 0 : oldExpires);
+  const expires = new Date(baseMs);
+  expires.setDate(expires.getDate() + item.days);
+  map[memberOwnerKey()] = {
+    plan:item.plan,
+    label:item.label,
+    fee:item.fee,
+    expiresAt:expires.toISOString(),
+    lastCode:code,
+    usedCodes:usedCodes.concat(code),
+    updatedAt:new Date().toISOString()
+  };
+  saveMembershipMap(map);
+  return map[memberOwnerKey()];
+}
+function renderMemberPanel(){
+  const box = document.getElementById("memberPanel");
+  if(!box) return;
+  const active = activeMembership();
+  const saved = currentMembership();
+  const badgeText = active ? `${active.label}有效` : "免费版";
+  const statusText = active
+    ? `当前账号已开通 ${active.label}，到期时间：${dateText(active.expiresAt)}。`
+    : (saved ? `上次会员已于 ${dateText(saved.expiresAt)} 到期，可以继续兑换续费。` : "当前是免费版，可以用兑换码开通月卡、季卡或年卡。");
+  box.innerHTML = `
+    <div class="member-head">
+      <div class="member-title">💎 会员兑换</div>
+      <div class="member-badge${active?'':' free'}">${badgeText}</div>
+    </div>
+    <div class="member-desc">${statusText}</div>
+    <div class="member-plans">
+      <div class="member-plan">月卡<small>按月收费<br>兑换码：YUEKA2026<br>XUEBA-MONTH-2026</small></div>
+      <div class="member-plan">季卡<small>季度收费<br>兑换码：JIKA2026<br>XUEBA-QUARTER-2026</small></div>
+      <div class="member-plan">年卡<small>年度收费<br>兑换码：NIANKA2026<br>XUEBA-YEAR-2026</small></div>
+    </div>
+    <div class="redeem-row">
+      <input id="redeemCodeInput" class="auth-input" maxlength="32" placeholder="输入兑换码">
+      <button onclick="redeemCodeUI()">兑换</button>
+    </div>
+    <div class="member-msg" id="memberMsg"></div>`;
+}
+function redeemCodeUI(){
+  const msg = document.getElementById("memberMsg");
+  try{
+    const m = redeemMembershipCode(document.getElementById("redeemCodeInput").value);
+    renderMemberPanel();
+    const nextMsg = document.getElementById("memberMsg");
+    if(nextMsg){
+      nextMsg.style.color="#1c8f48";
+      nextMsg.textContent = `兑换成功：${m.label}，有效期至 ${dateText(m.expiresAt)}。`;
+    }
+  }catch(e){
+    if(msg){
+      msg.style.color="#d63b3b";
+      msg.textContent = e.message || "兑换失败";
+    }
+  }
+}
 
 async function registerParent(email, password, displayName){
   email=String(email||'').trim().toLowerCase(); displayName=String(displayName||'家长').trim()||'家长';
@@ -1856,6 +1965,7 @@ async function renderChildScreen(){
   if(!currentParent){ go('authScreen'); return; }
   childrenCache=await getChildren(currentParent.uid);
   document.getElementById('parentAccountInfo').textContent = `${currentParent.displayName||'家长'} · ${currentParent.email} · ${cloudLabel()}`;
+  renderMemberPanel();
   renderAvatarChips();
   const list=document.getElementById('childList');
   list.innerHTML = childrenCache.length ? childrenCache.map(c=>`<button class="modebtn m-learn" onclick="selectChild('${c.id}')"><span class="big">${c.avatar||'🧒'}</span><span>${c.name}<small>${gradeLabel(c.grade)} · ⭐ ${c.stars||0} · 进入学习</small></span></button>`).join('') : '<div class="empty"><span class="emoji">👨‍👩‍👧</span>还没有孩子档案，先创建一个。</div>';
@@ -2220,6 +2330,11 @@ function renderParent(){
     ? report.recentWrong.slice(0,5).map(x=>`${x.subject}「${x.q.replace(/<[^>]+>/g,"").slice(0,22)}」错${x.wrongs}次`).join("；")
     : "暂时还没有具体薄弱题点。";
   const gradeText = report.grade==null? "未设置（显示全部难度）" : gradeLabel(report.grade);
+  const member = activeMembership();
+  const savedMember = currentMembership();
+  const memberText = member
+    ? `会员状态：${member.label}有效，到期 ${dateText(member.expiresAt)}。`
+    : (savedMember ? `会员状态：已到期（${dateText(savedMember.expiresAt)}），可回到孩子档案页继续兑换。` : "会员状态：免费版，可回到孩子档案页输入兑换码。");
   const childOverview = (childrenCache||[]).map(c=>{
     const childProfile={id:c.id,parentUid:currentParent?.uid||"guest"};
     const childStore = normalizeStore(c.progressStore || JSON.parse(localStorage.getItem(profileSaveKey(childProfile)) || "{}"));
@@ -2238,6 +2353,7 @@ function renderParent(){
   document.getElementById("parentCard").innerHTML = `
     <div class="mode-title">家长查看</div>
     <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · 年级：${gradeText} · ${cloudLabel()}</div>
+    <div class="parent-note" style="background:#eef8ff;color:#33414f">${memberText}</div>
     ${currentParent?`
     <div class="setup-label" style="margin-top:8px">👨‍👩‍👧 所有孩子概览</div>
     <table class="parent-table">
