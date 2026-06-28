@@ -1,0 +1,13 @@
+{
+  "name": "xueba-aliyun-function",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "ali-oss": "^6.22.0"
+  },
+  "devDependencies": {}
+}

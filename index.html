@@ -1629,6 +1629,22 @@ function activeMembership(){
   const m = currentMembership();
   return m && Date.parse(m.expiresAt) > Date.now() ? m : null;
 }
+function saveCurrentMembership(membership){
+  if(!membership) return;
+  const map = loadMembershipMap();
+  map[memberOwnerKey()] = membership;
+  saveMembershipMap(map);
+}
+async function syncMembershipFromCloud(){
+  if(!cloudOn()) return null;
+  try{
+    const res = await fetch(api("/api/membership"), {headers:authHeaders(), cache:"no-store"});
+    if(!res.ok) return null;
+    const data = await res.json().catch(()=>({}));
+    if(data.membership) saveCurrentMembership(data.membership);
+    return data.membership || null;
+  }catch(e){ return null; }
+}
 function redeemMembershipCode(raw){
   const code = String(raw||"").trim().toUpperCase();
   const item = REDEEM_CODES[code];
@@ -1652,6 +1668,23 @@ function redeemMembershipCode(raw){
   };
   saveMembershipMap(map);
   return map[memberOwnerKey()];
+}
+async function redeemMembershipCodeCloudFirst(raw){
+  const code = String(raw||"").trim().toUpperCase();
+  if(cloudOn()){
+    try{
+      const res = await fetch(api("/api/membership/redeem"), {method:"POST", headers:authHeaders(), body:JSON.stringify({code})});
+      const data = await res.json().catch(()=>({}));
+      if(res.ok && data.membership){
+        saveCurrentMembership(data.membership);
+        return data.membership;
+      }
+      if(res.status !== 404) throw new Error(data.error || "兑换失败");
+    }catch(e){
+      if(e.message && e.message !== "Failed to fetch") throw e;
+    }
+  }
+  return redeemMembershipCode(code);
 }
 function renderMemberPanel(){
   const box = document.getElementById("memberPanel");
@@ -1679,10 +1712,10 @@ function renderMemberPanel(){
     </div>
     <div class="member-msg" id="memberMsg"></div>`;
 }
-function redeemCodeUI(){
+async function redeemCodeUI(){
   const msg = document.getElementById("memberMsg");
   try{
-    const m = redeemMembershipCode(document.getElementById("redeemCodeInput").value);
+    const m = await redeemMembershipCodeCloudFirst(document.getElementById("redeemCodeInput").value);
     renderMemberPanel();
     const nextMsg = document.getElementById("memberMsg");
     if(nextMsg){
@@ -1965,6 +1998,7 @@ async function renderChildScreen(){
   if(!currentParent){ go('authScreen'); return; }
   childrenCache=await getChildren(currentParent.uid);
   document.getElementById('parentAccountInfo').textContent = `${currentParent.displayName||'家长'} · ${currentParent.email} · ${cloudLabel()}`;
+  await syncMembershipFromCloud();
   renderMemberPanel();
   renderAvatarChips();
   const list=document.getElementById('childList');
