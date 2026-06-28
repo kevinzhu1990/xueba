@@ -1368,91 +1368,147 @@ function buildAll(){
    - 词条卡 {word, say, mean}     （英语单词、成语）
    - 知识卡 {front, back, tag}     （地理/生物/化学/物理/阅读 等知识点）
    每个学科开头保留几张「方法/导读」卡，后面接全部知识卡。 */
-function factCard(it, tag){ return {front: it.q, back: it.a, tag: tag||"知识点", lv: it.lv||1}; }
+function lessonHint(tag, q, a){
+  if(tag==="中国省会") return "省会是一个省的行政中心。记忆时把“省名”和“省会城市”连在一起，不要和国家首都混淆。";
+  if(tag==="世界首都") return "首都是一个国家的政治中心。题目问“国家的首都”时，要找国家对应的城市。";
+  if(tag==="中国行政区") return "直辖市是直接由中央管理的省级行政区，和省、自治区一样属于省级行政区。";
+  if(tag && tag.includes("地理")) return "先判断题目问的是方向、地形、河流、城市还是地球运动，再回忆对应概念。";
+  if(tag && tag.includes("生物")) return "观察生物时按“住哪里、怎么动、吃什么、身体特征”来理解，不要只背一个答案。";
+  if(tag && tag.includes("科学")) return "先想生活里能看到的现象，再记结论。实验相关内容要注意安全，不要自己随便尝试危险操作。";
+  if(tag && tag.includes("物理")) return "物理题要先找现象背后的原因：力、光、声音、电、磁铁分别解释不同现象。";
+  return "先理解题目问的知识点，再记住答案。做题时要能说出为什么。";
+}
+function factCard(it, tag){
+  return {front: it.q, back:`答案：${it.a}\n理解：${lessonHint(tag||"知识点", it.q, it.a)}`, tag: tag||"知识点", lv: it.lv||1};
+}
 function wordCard(word, say, mean){ return {word, say, mean}; }
+function englishWordCard(en, zh, emo, cat){
+  let tip = `记忆：先看图，再听读音，最后遮住中文说出 ${en}。`;
+  let sentence = `例句：I know ${en}.`;
+  if(["动物","玩具运动"].includes(cat)) sentence = `例句：I see a ${en}.`;
+  if(["水果","食物"].includes(cat)) sentence = `例句：I like ${en}.`;
+  if(cat==="颜色") sentence = `例句：It is ${en}.`;
+  if(cat==="家人") sentence = `例句：This is my ${en}.`;
+  if(cat==="动作") sentence = `例句：I can ${en}.`;
+  if(cat==="数字") sentence = `例句：I can count ${en}.`;
+  return wordCard(en, cat, `${emo} ${zh}\n${sentence}\n${tip}`);
+}
+function idiomStudyCard(id, mean){
+  return wordCard(id, "成语好词", `意思：${mean}\n用法：先想一个生活场景，再试着用这个成语说一句话。\n提醒：不要只背字面，要说得出什么时候能用。`);
+}
 function studyCard(front, back, tag, lv){ return {front, back, tag:tag||"学习方法", lv:lv||1}; }
+function lessonCard(front, parts, tag, lv){
+  return studyCard(front, [
+    parts.learn ? `学什么：${parts.learn}` : "",
+    parts.method ? `怎么看：${parts.method}` : "",
+    parts.example ? `例子：${parts.example}` : "",
+    parts.mistake ? `易错点：${parts.mistake}` : ""
+  ].filter(Boolean).join("\n"), tag, lv);
+}
+function provinceCard(p, c){
+  return lessonCard(`${p} 的省会是哪里？`, {
+    learn:"省会是一个省的重要城市。",
+    method:"看到“某省的省会”，要找这个省的行政中心。",
+    example:`${p} 的省会是 ${c}。`,
+    mistake:"省会不是首都。首都是国家的中心，省会是省的中心。"
+  }, "中国省会", 2);
+}
+function countryCard(c, cap, cont){
+  return lessonCard(`${c} 的首都是？（在${cont}）`, {
+    learn:"首都是一个国家的政治中心。",
+    method:"题目问“国家的首都”，要把国家和城市配对记。",
+    example:`${c} 的首都是 ${cap}。`,
+    mistake:"不要把国家、城市和大洲混在一起。大洲是更大的区域。"
+  }, "世界首都", 2);
+}
 
 const STUDY_GUIDES = {
   english:[
-    wordCard("英语先学什么", "学习路线", "① 先看图和中文意思\n② 点 🔊 听单词读音\n③ 跟读 2 遍\n④ 再去做选择题"),
-    wordCard("记单词小方法", "听、看、说", "看到 apple，不只记字母，还要想到 🍎 苹果。\n听一遍，自己说一遍，最后遮住中文回想意思。"),
-    wordCard("首字母很重要", "拼写基础", "cat 的第一个字母是 C。\n做首字母题时，先慢慢读出单词，再看开头发音。"),
-    wordCard("同类一起记", "分类记忆", "动物、颜色、食物、时间、职业分开学。\n同一类词放在一起，更容易比较和记住。")
+    wordCard("英语先学什么", "学习路线", "① 看图和中文意思\n② 点 🔊 听单词\n③ 跟读 2 遍\n④ 用一句话说出来\n⑤ 再去做选择题"),
+    wordCard("记单词小方法", "听、看、说", "看到 apple，不只记字母，还要想到 🍎 苹果。\n先听，再说，最后遮住中文回想意思。"),
+    wordCard("首字母很重要", "拼写基础", "cat 的第一个字母是 C。\n做首字母题时，先慢慢读出单词，再听第一个声音。"),
+    wordCard("句子里记单词", "会用才算会", "apple 是苹果。\nI eat an apple. 我吃一个苹果。\n单词放进句子里更容易记住。"),
+    wordCard("同类一起记", "分类记忆", "动物：cat、dog、bird。\n颜色：red、blue、yellow。\n同一类词放在一起，更容易比较和记住。")
   ],
   idiom:[
     wordCard("成语先懂意思", "不是死背", "先读成语，再看意思，最后想一个生活里的例子。\n例如：做题很认真，可以说“一丝不苟”。"),
     wordCard("填字题怎么做", "看前后字", "补全成语时，先把已经给出的字连起来读一遍。\n如果读起来熟悉，再从选项里找最顺口、最合理的字。"),
     wordCard("成语怎么用", "造句练习", "学完一个成语，可以试着说一句话。\n例如：他每天练字，持之以恒，进步很快。"),
+    wordCard("使用场景", "别用错地方", "画蛇添足适合说“多做了一步反而不好”。\n如果是认真补充细节，就不能乱用这个成语。"),
     wordCard("好词积累", "写作准备", "成语好词不是只为考试，也能让作文更生动。\n描写风景可用“山清水秀”，描写安静可用“鸦雀无声”。")
   ],
   math:[
-    studyCard("加减法先看清题意", "看见“一共、又买、增加”，多半用加法。\n看见“还剩、送出、少了”，多半用减法。", "加减法", 1),
-    studyCard("乘法表示几个几", "3 个盘子，每盘 4 块饼干，就是 3 个 4。\n可以列式 3×4=12。", "乘法", 2),
-    studyCard("除法表示平均分", "24 个苹果平均分给 6 人，就是 24÷6。\n想：几乘 6 等于 24？答案是 4。", "除法", 2),
-    studyCard("周长和面积别混", "周长是一圈有多长，用长度单位。\n面积是占多大地方，用平方单位。", "图形", 3),
-    studyCard("找规律先看变化", "数列题先看相邻两个数差多少，或者是不是每次乘同一个数。\n3,6,12,24 是每次乘 2。", "找规律", 3),
-    studyCard("应用题三步法", "第一步圈出数字，第二步找关键词，第三步列式计算。\n算完要把答案放回题目里检查是否合理。", "应用题", 2)
+    lessonCard("加法表示合起来变多", {learn:"加法常表示合起来、又来了、增加了。", method:"看到“一共、又买、增加、合起来”，多半用加法。", example:"小明有 3 个苹果，妈妈又给 2 个，一共有 3+2=5 个。", mistake:"不要看到两个数字就乱加，要看题目问什么。"}, "加法", 1),
+    lessonCard("减法表示拿走和还剩", {learn:"减法常表示拿走、少了、还剩。", method:"看到“吃掉、送出、还剩、少几个”，多半用减法。", example:"有 8 颗糖，吃掉 3 颗，还剩 8-3=5 颗。", mistake:"“比谁多几个/少几个”也常用减法。"}, "减法", 1),
+    lessonCard("乘法表示几个几", {learn:"乘法表示几个相同的数相加。", method:"先找“有几组”，再找“每组几个”。", example:"4 个盘子，每盘 3 个饼干，就是 4 个 3，列式 4×3=12。", mistake:"每组数量必须一样，才适合直接用乘法。"}, "乘法", 2),
+    lessonCard("除法表示平均分", {learn:"除法常表示平均分或每份是多少。", method:"看到“平均分、每人几个、可以分几组”，想到除法。", example:"12 个苹果平均分给 3 人，每人 12÷3=4 个。", mistake:"平均分要每份一样多，不能有的人多有的人少。"}, "除法", 2),
+    lessonCard("周长是一圈有多长", {learn:"周长是图形外面一圈的长度。", method:"计算时把外边一圈都加起来。", example:"正方形边长 5 厘米，周长是 5×4=20 厘米。", mistake:"周长不是里面有多大，不要和面积混淆。"}, "周长", 3),
+    lessonCard("面积是铺满一片有多大", {learn:"面积表示一个平面占多大地方。", method:"常用“铺满多少小方格”来理解。", example:"边长 5 厘米的正方形，面积是 5×5=25 平方厘米。", mistake:"面积单位常带“平方”，周长单位不带“平方”。"}, "面积", 3),
+    lessonCard("找规律先看变化", {learn:"规律题要找前后两个数或图形怎样变化。", method:"先看相差多少，再看是不是乘同一个数，最后看有没有重复排列。", example:"2,5,8,11 每次多 3，下一个是 14。", mistake:"不要只看最后一个数，要看整串变化。"}, "找规律", 2),
+    lessonCard("应用题三步法", {learn:"应用题不是只算数字，要先读懂关系。", method:"第一步圈数字，第二步找关键词，第三步列式计算。", example:"“一共”常用加法，“还剩”常用减法，“每份一样多”常用除法。", mistake:"算完要把答案放回题目里检查是否合理。"}, "应用题", 2)
   ],
   reading:[
+    wordCard("读前任务", "带着问题读", "读短文前先问自己：谁？在哪里？发生了什么？结果怎样？\n带着任务读，比盲目读更容易找到答案。"),
     wordCard("阅读三步", "先读再答", "① 第一遍读懂谁在做什么\n② 第二遍找题目问的句子\n③ 答完回到原文检查"),
-    wordCard("找关键词", "定位答案", "题目问“什么时候”，就找时间词。\n题目问“为什么”，就找原因句。"),
+    wordCard("找关键词", "定位答案", "题目问“什么时候”，就找时间词。\n题目问“在哪里”，就找地点词。\n题目问“为什么”，就找原因句。"),
+    wordCard("不要凭感觉", "回原文找证据", "阅读题不要只凭印象选答案。\n每道题都要回到短文里找一句能支持答案的话。"),
     wordCard("概括主要内容", "谁 + 做什么", "短文主要内容常常可以用“谁做了什么，结果怎样”来概括。"),
-    wordCard("推理题", "从文中找依据", "有些答案不会原句出现，要根据短文里的行为和结果来判断。")
+    wordCard("推理题", "从文中找依据", "有些答案不会原句出现，要根据短文里的行为和结果来判断。\n推理也要有根据，不能乱猜。")
   ],
   geography:[
     wordCard("地理学什么", "位置和环境", "地理帮助我们认识方向、地图、城市、国家、河流、山脉和气候。"),
-    studyCard("方向基础", "地图上通常是上北下南、左西右东。\n指南针能帮助我们辨别南北方向。", "方向与地图", 1),
-    studyCard("省会和首都", "省会是一个省的行政中心。\n首都是一个国家的政治中心，例如中国首都是北京。", "行政区与首都", 2),
-    studyCard("地球运动", "地球自转带来白天和黑夜。\n地球绕太阳公转，与四季变化有关。", "地球运动", 3),
-    studyCard("地形地貌", "平原较平坦，高原海拔高，山地起伏大，沙漠干旱少水。", "地形地貌", 2)
+    lessonCard("方向基础", {learn:"地图上通常是上北下南、左西右东。", method:"看地图题先找方向标，没有方向标时默认上北下南。", example:"学校在公园上方，通常可以说学校在公园北面。", mistake:"手机地图旋转后方向会变，做题时要看清方向标。"}, "方向与地图", 1),
+    lessonCard("首都和省会别混", {learn:"首都是国家的中心，省会是省的中心。", method:"看到“国家”找首都，看到“省”找省会。", example:"中国首都是北京，广东省会是广州。", mistake:"北京既是中国首都，也是直辖市，不要把所有大城市都叫省会。"}, "行政区与首都", 2),
+    lessonCard("地球自转和公转", {learn:"地球自转带来白天和黑夜，地球绕太阳公转和四季变化有关。", method:"题目问昼夜多想自转，问四季多想公转。", example:"我们看到太阳东升西落，和地球自转有关。", mistake:"自转不是绕太阳转，公转才是绕太阳转。"}, "地球运动", 3),
+    lessonCard("地形地貌", {learn:"地形是地表高低起伏的样子。", method:"平原较平坦，高原海拔高，山地起伏大，沙漠干旱少水。", example:"青藏高原海拔高，塔克拉玛干沙漠干旱少水。", mistake:"高原不一定都是山，沙漠也不一定完全没有生命。"}, "地形地貌", 2)
   ],
   biology:[
     wordCard("生物学什么", "动物、植物和人体", "生物课认识生命：动物怎样生活，植物怎样生长，人体怎样保持健康。"),
-    studyCard("动物分类观察", "观察动物时可以看：怎么呼吸、怎么移动、住在哪里、身体有什么特征。", "动物特征", 1),
-    studyCard("植物的根茎叶", "根吸水，茎运输，叶子能进行光合作用，花和种子帮助繁殖。", "植物常识", 2),
-    studyCard("食物链", "绿色植物能制造养分，草食动物吃植物，肉食动物吃其他动物。", "食物链", 3),
-    studyCard("健康习惯", "饭前便后洗手，保护牙齿和眼睛，打喷嚏遮住口鼻，能减少疾病传播。", "身体健康", 1)
+    lessonCard("观察动物四步", {learn:"观察动物要看生活方式，不只记名字。", method:"按“住哪里、怎么动、吃什么、身体特征”四步观察。", example:"鱼住在水里，游泳，用鳃呼吸，身体多有鳞片。", mistake:"不要只凭会不会飞判断动物类别。"}, "动物特征", 1),
+    lessonCard("植物的根茎叶", {learn:"植物的不同部分有不同作用。", method:"根吸水，茎运输，叶子制造养分，花和种子帮助繁殖。", example:"给植物浇水，根会吸收水分，再通过茎送到其他地方。", mistake:"叶子不只是好看，它还能帮助植物制造养分。"}, "植物常识", 2),
+    lessonCard("食物链", {learn:"生物之间有吃与被吃的关系。", method:"通常从绿色植物开始，再到草食动物、肉食动物。", example:"草被兔子吃，兔子可能被狐狸吃。", mistake:"食物链不是谁更厉害，而是能量怎样传递。"}, "食物链", 3),
+    lessonCard("健康习惯", {learn:"好习惯能减少生病，保护身体。", method:"饭前便后洗手，早晚刷牙，保护眼睛，打喷嚏遮住口鼻。", example:"一天刷两次牙，可以帮助保护牙齿。", mistake:"不是只有生病时才讲卫生，平时就要坚持。"}, "身体健康", 1)
   ],
   chemistry:[
     wordCard("小科学学什么", "物质和变化", "小科学先从生活现象学起：水会结冰，糖能溶解，铁会生锈。"),
-    studyCard("水的三态", "水可以是液态的水、固态的冰、气态的水蒸气。\n遇冷和加热会让状态改变。", "水和物态变化", 1),
-    studyCard("溶解和分离", "盐和糖能溶解在水里，沙子不容易溶解。\n过滤、蒸发、磁铁都能帮助分离物质。", "溶解", 2),
-    studyCard("空气和燃烧", "燃烧需要氧气。二氧化碳常用来灭火，因为它不支持燃烧。", "空气与气体", 3),
-    studyCard("实验安全", "不能玩火，不能直接闻未知气味，不能湿手碰电，实验要听老师安排。", "实验安全", 1)
+    lessonCard("水的三态", {learn:"水可以是液态水、固态冰、气态水蒸气。", method:"遇冷可能结冰，加热可能变成水蒸气。", example:"冰块放久了会融化成水，水烧开会冒水蒸气。", mistake:"看不见的水蒸气不是“没有了”，只是变成气态。"}, "水和物态变化", 1),
+    lessonCard("盐和糖会溶解", {learn:"有些物质放进水里会溶解。", method:"看不见了不等于消失，可以尝味道或蒸发水来判断。", example:"盐放进水里搅一搅看不见了，但水变咸了。", mistake:"不能随便品尝未知物质，课堂实验要听老师安排。"}, "溶解", 2),
+    lessonCard("空气和燃烧", {learn:"燃烧需要氧气，二氧化碳常用来灭火。", method:"火变小或熄灭，常和氧气不足有关。", example:"用杯子罩住小蜡烛，过一会儿蜡烛会熄灭。", mistake:"火和未知气体都危险，不能自己随便实验。"}, "空气与气体", 3),
+    lessonCard("实验安全", {learn:"安全比结果更重要。", method:"不玩火，不直接闻未知气味，不湿手碰电，不把实验材料放进嘴里。", example:"闻气味要用手轻轻扇一点气味过来，不能鼻子凑近猛闻。", mistake:"看到有趣实验也不能自己乱试，要有大人或老师指导。"}, "实验安全", 1)
   ],
   physics:[
     wordCard("物理学什么", "力、光、声、电", "物理解释生活里的现象：为什么会有影子，声音怎么传，磁铁能吸什么。"),
-    studyCard("浮和沉", "轻的不一定浮，重的不一定沉。\n物体能不能浮起来，和材料、形状、受到的浮力有关。", "浮和沉", 1),
-    studyCard("磁铁", "磁铁能吸铁一类材料。\n同名磁极相互排斥，异名磁极相互吸引。", "磁铁", 2),
-    studyCard("光和影子", "光沿直线传播，不透明物体挡住光就会形成影子。\n镜子能反射光。", "光和影子", 2),
-    studyCard("声音", "声音来自物体振动，需要空气、水等物质传播。\n在真空里声音不能传播。", "声音", 3),
-    studyCard("用电安全", "湿手不能碰插座，电路要闭合小灯泡才会亮。\n金属容易导电，橡胶、塑料常是绝缘体。", "电", 2)
+    lessonCard("浮和沉", {learn:"物体能不能浮起来，和材料、形状、受到的浮力有关。", method:"先观察物体在水里是浮起还是下沉，再想原因。", example:"空塑料瓶通常会浮起来，装满水后可能更容易下沉。", mistake:"轻的不一定都浮，重的不一定都沉。"}, "浮和沉", 1),
+    lessonCard("磁铁", {learn:"磁铁能吸铁一类材料。", method:"用磁铁靠近物体，看能不能被吸住。", example:"回形针容易被磁铁吸住，木块通常不会。", mistake:"磁铁不能吸所有金属，铝、铜通常不容易被普通磁铁吸住。"}, "磁铁", 2),
+    lessonCard("光和影子", {learn:"光沿直线传播，不透明物体挡住光就会形成影子。", method:"找光从哪里来，再看什么东西挡住了光。", example:"手挡住手电筒的光，墙上会出现手影。", mistake:"透明物体不一定形成清楚的影子。"}, "光和影子", 2),
+    lessonCard("声音来自振动", {learn:"声音来自物体振动，需要空气、水等物质传播。", method:"摸一摸正在发声的物体，常能感觉到轻微振动。", example:"敲铃时铃在振动，所以能听到声音。", mistake:"真空里没有空气，声音不能传播。"}, "声音", 3),
+    lessonCard("用电安全", {learn:"电能让灯亮、机器工作，但也有危险。", method:"湿手不碰插座，坏电线不乱摸，电路闭合小灯泡才会亮。", example:"金属容易导电，橡胶、塑料常是绝缘体。", mistake:"不能把金属东西插进插座。"}, "电", 2)
   ]
 };
 
 function genCards(){
   // —— 英语：每个单词一张卡（覆盖全部词汇）——
   const ec=[...STUDY_GUIDES.english];
-  for(const cat in EN) EN[cat].forEach(([en,zh,emo])=> ec.push({word:en, say:cat, mean:`${emo} ${zh}`}));
+  for(const cat in EN) EN[cat].forEach(([en,zh,emo])=> ec.push(englishWordCard(en,zh,emo,cat)));
   DATA.english.cards = ec;
 
   // —— 成语：每个成语一张卡 ——
   const ic=[...STUDY_GUIDES.idiom];
-  IDIOMS.forEach(([id,mean])=> ic.push({word:id, say:"成语好词", mean:`意思：${mean}`}));
+  IDIOMS.forEach(([id,mean])=> ic.push(idiomStudyCard(id,mean)));
   DATA.idiom.cards = ic;
 
   // —— 地理 ——
   const gc=[...STUDY_GUIDES.geography];
-  MUNICIPALITIES.forEach(m=> gc.push({front:`${m} 是哪一类省级行政区？`, back:"直辖市", tag:"中国行政区", lv:2}));
-  PROVINCES.forEach(([p,c])=> gc.push({front:`${p} 的省会是哪里？`, back:c, tag:"中国省会", lv:2}));
-  COUNTRIES.forEach(([c,cap,cont])=> gc.push({front:`${c} 的首都是？（在${cont}）`, back:cap, tag:"世界首都", lv:2}));
+  MUNICIPALITIES.forEach(m=> gc.push(lessonCard(`${m} 是哪一类省级行政区？`, {learn:"直辖市是省级行政区。", method:"看到北京、上海、天津、重庆，要想到直辖市。", example:`${m} 是直辖市。`, mistake:"直辖市不是普通城市，它和省、自治区一样属于省级行政区。"}, "中国行政区", 2)));
+  PROVINCES.forEach(([p,c])=> gc.push(provinceCard(p,c)));
+  COUNTRIES.forEach(([c,cap,cont])=> gc.push(countryCard(c,cap,cont)));
   GEO_HARD.forEach(it=> gc.push(factCard(it,"地理知识")));
   GEO_EXTRA.forEach(it=> gc.push(factCard(it,"地理趣闻")));
   DATA.geography.cards = gc;
 
   // —— 生物 ——
   const bc=[...STUDY_GUIDES.biology];
-  ANIMALS.forEach(a=> bc.push({front:`${a[0]} 是什么样的动物？`, back:`${a[1]}、${a[2]}、住在${a[3]}、${a[4]}、${a[5]}`, tag:"动物档案", lv:1}));
+  ANIMALS.forEach(a=> bc.push(lessonCard(`${a[0]} 是什么样的动物？`, {learn:"认识动物要看生活方式和身体特征。", method:"按“类别、身体、住处、运动、食物”五点观察。", example:`${a[0]}：${a[1]}，${a[2]}，住在${a[3]}，${a[4]}，${a[5]}。`, mistake:"不要只凭一个特征判断动物，要多看几个特点。"}, "动物档案", 1)));
   BIO_EXTRA.forEach(it=> bc.push(factCard(it,"生物趣闻")));
   DATA.biology.cards = bc;
 
@@ -1486,7 +1542,7 @@ function genCards(){
     {word:"逆推法", say:"倒着算", mean:"🔙 一个数加3等于10，就倒着算 10-3=7\n遇到“不知道原来是多少”，可以从结果往回推"},
     {word:"找规律进阶", say:"看差多少", mean:"🔢 2,5,8,11 每次多3\n先看相邻两个数相差多少，再推出下一个"}
   ]);
-  MATH_EXTRA.forEach(it=> DATA.math.cards.push({front:it.q, back:`答案：${it.a}\n先找题目里的数量关系，再列式计算。`, tag:"应用题讲解", lv:it.lv||1}));
+  MATH_EXTRA.forEach(it=> DATA.math.cards.push({front:it.q, back:`答案：${it.a}\n学什么：这是一道应用题，重点是读懂数量关系。\n怎么看：先圈数字，再找“一共、还剩、平均分、每组几个”等关键词。\n例子：把题目里的关系列成算式，再计算。\n易错点：不要只看到数字就直接相加，算完要回到题目检查。`, tag:"应用题讲解", lv:it.lv||1}));
 }
 
 /* ============== 家长账号 / 孩子档案 / 本地与云端存储 ============== */
@@ -2262,9 +2318,20 @@ function openSubject(key){
 
 /* ============== 学习卡片 ============== */
 let learnCards=[];
+function visibleLearnCards(cards){
+  const grade = store.grade;
+  if(grade==null) return cards;
+  const filtered = cards.filter(c=>{
+    const lv = Number(c.lv)||1;
+    if(grade<=1) return lv<=1;      // 低年级先看基础概念和生活观察
+    if(grade<=3) return lv<=2;      // 中低年级开放常用方法卡
+    return true;                    // 高年级开放全部拓展卡
+  });
+  return filtered.length ? filtered : cards;
+}
 function startLearn(){
   if(curSubject==="english"){ renderEnCats(); go("enCatScreen"); return; }
-  learnCards = DATA[curSubject].cards;
+  learnCards = visibleLearnCards(DATA[curSubject].cards);
   learnIdx=0; go("learnScreen"); renderLearn();
 }
 const EN_CAT_EMO={动物:"🐶",水果:"🍎",颜色:"🎨",身体:"👀",家人:"👨‍👩‍👧",食物:"🍚",自然:"🌳",学习:"📖",动作:"🏃",交通:"🚗",天气:"☀️",形状:"⭐",衣物:"👕",玩具运动:"⚽",地点:"🏠",数字:"🔢",时间:"🗓️",房间家具:"🏠",课堂指令:"🙋",情绪:"😊",形容词:"📏",职业:"👩‍🏫"};
@@ -2280,7 +2347,7 @@ function renderEnCats(){
   }
 }
 function learnEn(cat){
-  learnCards = (cat==="all")? DATA.english.cards : DATA.english.cards.filter(c=>c.say===cat);
+  learnCards = visibleLearnCards((cat==="all")? DATA.english.cards : DATA.english.cards.filter(c=>c.say===cat));
   learnIdx=0; go("learnScreen"); renderLearn();
 }
 function learnBack(){ go(curSubject==="english"? "enCatScreen":"modeScreen"); }
@@ -2292,7 +2359,7 @@ function renderLearn(){
   const speakBtn = `<button class="speakbtn" onclick="speakCard()">🔊 听一听</button>`;
   let html;
   if(c.front!==undefined){
-    // 知识卡：上面是问题，下面是答案
+    // 知识卡/课程卡：上面是主题，下面是讲解
     const lvTag = c.lv? ["","⭐","⭐⭐","⭐⭐⭐"][c.lv] : "";
     html = `
       <div class="fc-sub">${c.tag||"知识点"} ${lvTag}</div>
@@ -2364,7 +2431,7 @@ function speakCard(){
   const c = learnCards[learnIdx]; if(!c) return;
   if(c.front!==undefined){
     if(curSubject==="reading") speak(c.back, "zh-CN");                 // 阅读：读整段短文
-    else speak(c.front + "。答案：" + c.back, "zh-CN");                // 知识卡：读问题+答案
+    else speak(c.front + "。" + c.back, "zh-CN");                       // 课程卡：读主题+讲解
   } else if(curSubject==="english" && /^[a-zA-Z]/.test(c.word)){
     speak(c.word, "en-US");          // 英语单词
   } else {                            // 成语、奥数方法卡等：读 词 + 说明
