@@ -225,7 +225,7 @@
         <button class="startbtn" onclick="registerParentUI()" style="margin-top:10px;background:linear-gradient(135deg,#4a90e2,#56ccf2)">注册家长账号</button>
         <button class="plain-link" onclick="startGuest()">游客体验</button>
         <button class="plain-link" onclick="forgotPassword()" style="color:#9aa7b4;font-size:13px;margin-top:4px">忘记密码？</button>
-        <div class="auth-tip">未配置 Firebase 时，会使用本机家长账号模式；配置 Firebase 后自动启用云端账号和学习记录。</div>
+        <div class="auth-tip">登录后星星、错题、学习记录自动保存到阿里云，换手机换电脑都不丢失。也可游客体验（记录仅存本机）。</div>
       </div>
     </div>
   </div>
@@ -1594,8 +1594,7 @@ function cloudErrorMessage(action, status, data){
 
 let cloudTimer = null;
 let cloudState = "local";
-let firebaseReady = false;
-let firebaseInitPromise = null;
+let cloudReady = false;
 let currentParent = loadParentSession();
 let currentChild = null;
 let childrenCache = [];
@@ -1604,8 +1603,7 @@ let activeProfile = loadProfile();
 let SAVE_KEY = profileSaveKey(activeProfile);
 let store = load();
 
-function firebaseConfigured(){ return !!CLOUD_API; }
-async function initAuth(){ firebaseReady = !!CLOUD_API; return firebaseReady; }
+async function initAuth(){ cloudReady = !!CLOUD_API; return cloudReady; }
 function getCurrentUser(){ return currentParent; }
 function onAuthStateChangedHandler(callback){ callback(currentParent); }
 
@@ -1739,7 +1737,7 @@ async function registerParent(email, password, displayName){
     catch(e){ throw new Error('连不上阿里云服务器，请检查网络后重试；也可以先用游客体验'); }
     if(!res.ok) throw new Error(cloudErrorMessage('注册', res.status, data));
     const parent={uid:email,email,displayName:data.displayName||displayName,token:data.token,role:'parent'};
-    currentParent=parent; saveParentSession(parent); firebaseReady=true; cloudState='synced'; return parent;
+    currentParent=parent; saveParentSession(parent); cloudReady=true; cloudState='synced'; return parent;
   }
   const accounts=localParentAccounts();
   if(accounts[email]) throw new Error('这个账号已注册，请直接登录');
@@ -1756,7 +1754,7 @@ async function loginParent(email, password){
     catch(e){ throw new Error('连不上阿里云服务器，请检查网络后重试；也可以先用游客体验'); }
     if(!res.ok) throw new Error(cloudErrorMessage('登录', res.status, data));
     const parent={uid:email,email,displayName:data.displayName||'家长',token:data.token,role:'parent'};
-    currentParent=parent; saveParentSession(parent); firebaseReady=true; cloudState='synced'; return parent;
+    currentParent=parent; saveParentSession(parent); cloudReady=true; cloudState='synced'; return parent;
   }
   const acc=localParentAccounts()[email];
   if(!acc || acc.passwordToken!==localPasswordToken(password)) throw new Error('账号或密码不正确');
