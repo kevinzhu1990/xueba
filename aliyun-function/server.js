@@ -1,7 +1,10 @@
-const OSS = require("ali-oss");
+const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
-const {createApp} = require("./app");
+const OSS = require("ali-oss");
+const {createApp} = require("./src/app");
+
+const PORT = process.env.PORT || process.env.FC_SERVER_PORT || 9000;
 
 function fileStorage() {
   const baseDir = process.env.LOCAL_DATA_DIR || "/tmp/xueba-cloud-data";
@@ -99,6 +102,19 @@ function requestFromEvent(event) {
   };
 }
 
+async function runHttp(req) {
+  const body = await readBody(req);
+  const url = req.url || req.path || "/";
+  return app.handle({
+    method: req.method,
+    url,
+    path: req.path || new URL(url, "http://local").pathname,
+    query: req.queries || Object.fromEntries(new URL(url, "http://local").searchParams.entries()),
+    headers: req.headers || {},
+    body
+  });
+}
+
 function sendHttpResponse(resp, result) {
   Object.entries(result.headers || {}).forEach(([k, v]) => resp.setHeader(k, v));
   resp.setStatusCode(result.statusCode || 200);
@@ -117,16 +133,7 @@ function eventResponse(result) {
 exports.handler = async function(req, resp) {
   try {
     if(resp && typeof resp.setHeader === "function" && typeof resp.send === "function") {
-      const body = await readBody(req);
-      const url = req.url || req.path || "/";
-      return sendHttpResponse(resp, await app.handle({
-        method: req.method,
-        url,
-        path: req.path || new URL(url, "http://local").pathname,
-        query: req.queries || Object.fromEntries(new URL(url, "http://local").searchParams.entries()),
-        headers: req.headers || {},
-        body
-      }));
+      return sendHttpResponse(resp, await runHttp(req));
     }
     return eventResponse(await app.handle(requestFromEvent(req)));
   } catch(e) {
@@ -144,3 +151,21 @@ exports.handler = async function(req, resp) {
     return eventResponse(result);
   }
 };
+
+if(require.main === module) {
+  http.createServer(async (req, res) => {
+    try {
+      const result = await runHttp(req);
+      Object.entries(result.headers || {}).forEach(([k, v]) => res.setHeader(k, v));
+      res.statusCode = result.statusCode || 200;
+      res.end(result.body || "");
+    } catch(e) {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.statusCode = 500;
+      res.end(JSON.stringify({error: e.message || "server error"}));
+    }
+  }).listen(PORT, () => {
+    console.log(`xueba backend listening on ${PORT}`);
+  });
+}

@@ -2,8 +2,9 @@
   "name": "xueba-aliyun-function",
   "version": "1.0.0",
   "private": true,
-  "main": "src/index.js",
+  "main": "server.js",
   "scripts": {
+    "start": "node server.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
