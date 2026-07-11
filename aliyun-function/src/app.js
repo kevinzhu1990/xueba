@@ -86,7 +86,12 @@ function defaultCodeCatalog() {
   return DEFAULT_REDEEM_CODES;
 }
 
-function createApp({storage, tokenSecret = process.env.TOKEN_SECRET || "change-me", redeemCodes = defaultCodeCatalog()} = {}) {
+function createApp({
+  storage,
+  tokenSecret = process.env.TOKEN_SECRET || "change-me",
+  redeemCodes = defaultCodeCatalog(),
+  recoveryCode = process.env.RECOVERY_CODE || process.env.FAMILY_CODE || "xueba2026"
+} = {}) {
   if(!storage) throw new Error("storage is required");
 
   async function currentUser(req) {
@@ -122,6 +127,31 @@ function createApp({storage, tokenSecret = process.env.TOKEN_SECRET || "change-m
     const user = await storage.get(`parents/${safeKey(username)}.json`);
     if(!user || user.passwordHash !== passwordHash(password, user.salt)) return json(401, {error: "账号或密码不正确"});
     return json(200, {displayName: user.displayName || "家长", token: signToken({uid: username, role: "parent"}, tokenSecret)});
+  }
+
+  async function resetPassword(req) {
+    const body = parseBody(req);
+    const username = normalizeUser(body.username);
+    const password = String(body.password || "");
+    const code = String(body.recoveryCode || "").trim();
+    if(!username || password.length < 6) return json(400, {error: "请输入账号和至少 6 位新密码"});
+    if(!recoveryCode || code !== recoveryCode) return json(403, {error: "家庭验证码不正确"});
+    const key = `parents/${safeKey(username)}.json`;
+    const user = await storage.get(key);
+    if(!user) return json(404, {error: "这个账号还没有注册，请先注册家长账号"});
+    const salt = crypto.randomBytes(16).toString("hex");
+    const updated = {
+      ...user,
+      salt,
+      passwordHash: passwordHash(password, salt),
+      updatedAt: nowIso(),
+      passwordResetAt: nowIso()
+    };
+    await storage.put(key, updated);
+    return json(200, {
+      displayName: updated.displayName || "家长",
+      token: signToken({uid: username, role: "parent"}, tokenSecret)
+    });
   }
 
   async function children(req) {
@@ -186,6 +216,7 @@ function createApp({storage, tokenSecret = process.env.TOKEN_SECRET || "change-m
     if(path === "/" || path === "/health") return json(200, {ok: true, storage: "oss", node: process.version, tokenSecretSet: tokenSecret !== "change-me"});
     if(path === "/api/register" && req.method === "POST") return register(req);
     if(path === "/api/login" && req.method === "POST") return login(req);
+    if(path === "/api/password/reset" && req.method === "POST") return resetPassword(req);
     if(path === "/api/children" && (req.method === "GET" || req.method === "PUT")) return children(req);
     if(path === "/api/progress" && (req.method === "GET" || req.method === "PUT")) return progress(req);
     if(path === "/api/membership" && req.method === "GET") return membership(req);

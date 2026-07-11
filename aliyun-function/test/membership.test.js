@@ -71,3 +71,40 @@ test("the same redemption code cannot be reused by the same parent", async () =>
   assert.equal(second.statusCode, 409);
   assert.match(JSON.parse(second.body).error, /已经兑换/);
 });
+
+test("parent can reset password with the family recovery code", async () => {
+  const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret", recoveryCode: "xueba2026"});
+  const registered = await call(app, "POST", "/api/register", {
+    username: "parent@example.com",
+    password: "123456",
+    displayName: "妈妈"
+  });
+  assert.equal(registered.statusCode, 200);
+
+  const badLogin = await call(app, "POST", "/api/login", {
+    username: "parent@example.com",
+    password: "wrong123"
+  });
+  assert.equal(badLogin.statusCode, 401);
+
+  const badCode = await call(app, "POST", "/api/password/reset", {
+    username: "parent@example.com",
+    password: "newpass123",
+    recoveryCode: "bad-code"
+  });
+  assert.equal(badCode.statusCode, 403);
+
+  const reset = await call(app, "POST", "/api/password/reset", {
+    username: "parent@example.com",
+    password: "newpass123",
+    recoveryCode: "xueba2026"
+  });
+  assert.equal(reset.statusCode, 200);
+  assert.ok(JSON.parse(reset.body).token);
+
+  const login = await call(app, "POST", "/api/login", {
+    username: "parent@example.com",
+    password: "newpass123"
+  });
+  assert.equal(login.statusCode, 200);
+});

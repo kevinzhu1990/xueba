@@ -1589,6 +1589,8 @@ function authHeaders(){ const h={'Content-Type':'application/json'}; if(currentP
 function cloudOn(){ return !!(CLOUD_API && currentParent && currentParent.token); }
 function cloudErrorMessage(action, status, data){
   if(status>=500) return "阿里云服务器当前异常（"+status+"），暂时无法"+action+"。这不是密码问题，请稍后再试；也可以先用游客体验。";
+  if(action==="登录" && status===401) return "账号或密码不正确。请检查邮箱和密码；如果忘记密码，点下面“忘记密码”用家庭验证码重设。";
+  if(action==="注册" && status===409) return "这个账号已注册。请直接登录；如果忘记密码，点下面“忘记密码”重设。";
   return (data&&data.error) || (action+"失败");
 }
 
@@ -1760,6 +1762,25 @@ async function loginParent(email, password){
   if(!acc || acc.passwordToken!==localPasswordToken(password)) throw new Error('账号或密码不正确');
   const {passwordToken, ...parent}=acc;
   currentParent=parent; saveParentSession(parent); return parent;
+}
+async function resetCloudPassword(email, password, recoveryCode){
+  email=String(email||'').trim().toLowerCase();
+  if(!email || !password || password.length<6) throw new Error('请输入账号和至少 6 位新密码');
+  if(!recoveryCode) throw new Error('请输入家庭验证码');
+  let res, data;
+  try{
+    res=await fetch(api('/api/password/reset'),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({username:email,password,recoveryCode})
+    });
+    data=await res.json().catch(()=>({}));
+  }catch(e){
+    throw new Error('连不上阿里云服务器，请检查网络后重试');
+  }
+  if(!res.ok) throw new Error((data&&data.error)||'密码重置失败');
+  const parent={uid:email,email,displayName:data.displayName||'家长',token:data.token,role:'parent'};
+  currentParent=parent; saveParentSession(parent); cloudReady=true; cloudState='synced'; return parent;
 }
 async function logoutParent(){
   currentParent=null; currentChild=null; activeProfile=null; saveParentSession(null); localStorage.removeItem(PROFILE_KEY);
@@ -1966,7 +1987,22 @@ const reportService={getParentDashboard:()=>getParentReport(),getChildReport:()=
 
 function forgotPassword(){
   if(CLOUD_API){
-    alert('如忘记密码，请重新注册一个新账号，或使用游客模式体验。\n如需找回已有云端数据，请联系管理员。');
+    const email = String(document.getElementById('parentEmail')?.value || prompt('请输入已注册的家长邮箱：') || '').trim().toLowerCase();
+    if(!email) return;
+    const newPwd = prompt('请输入新密码（至少 6 位）：');
+    if(!newPwd || newPwd.length < 6){ alert('密码至少需要 6 位，未重置。'); return; }
+    const code = prompt('请输入家庭验证码：');
+    if(!code) return;
+    const err=document.getElementById('loginError');
+    if(err) err.textContent='正在重置密码...';
+    resetCloudPassword(email,newPwd,code).then(async ()=>{
+      if(err) err.textContent='';
+      alert('密码已重置，并已登录。手机、iPad 和电脑请使用这个新密码登录。');
+      await renderChildScreen();
+    }).catch(e=>{
+      if(err) err.textContent=e.message || '密码重置失败';
+      else alert(e.message || '密码重置失败');
+    });
     return;
   }
   const email = prompt('请输入已注册的家长邮箱：');
