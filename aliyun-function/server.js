@@ -97,7 +97,6 @@ async function staticResponse(urlPath) {
       statusCode: 200,
       headers: {
         "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
-        "Content-Disposition": "inline",
         "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300"
       },
       body
@@ -109,7 +108,7 @@ async function staticResponse(urlPath) {
         const body = await fs.promises.readFile(path.join(PUBLIC_DIR, "index.html"), "utf8");
         return {
           statusCode: 200,
-          headers: {"Content-Type": MIME_TYPES[".html"], "Content-Disposition": "inline", "Cache-Control": "no-store"},
+          headers: {"Content-Type": MIME_TYPES[".html"], "Cache-Control": "no-store"},
           body
         };
       } catch(inner) {
