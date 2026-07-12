@@ -2189,7 +2189,7 @@ function recordQuestionResult(subject, idx, isCorrect){
   const st = getQStat(subject, idx);
   if(isCorrect){
     st.rightStreak++;
-    const targetStreak = (testMode==="wrong") ? 2 : 5;
+    const targetStreak = 5;
     if(st.rightStreak>=targetStreak) st.mastered = true;
   } else {
     st.rightStreak = 0;
@@ -2746,7 +2746,7 @@ function choose(btn, correct, qIndex){
     // 连续答对到学会后，才从错题本移除；避免一次猜对就被清掉。
     if(qStat.mastered) removeWrong(curSubject, qIndex);
     fb.className="feedback show ok";
-    const targetStreak = (testMode==="wrong") ? 2 : 5;
+    const targetStreak = 5;
     const head = qStat.mastered
       ? `🏆 连续答对 ${targetStreak} 次，这题已经归入“已学会”啦！以后日常测试会少考它。`
       : pick(["🎉 答对啦！真聪明！","⭐ 太棒了！","👍 完全正确！","🌟 你真厉害！"]) + ` 连对 ${qStat.rightStreak}/${targetStreak}`;
