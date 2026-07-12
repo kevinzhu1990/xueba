@@ -1,0 +1,193 @@
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100dvh;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
+}
+
+button,
+.chip,
+.subject,
+.opt {
+  min-height: 52px;
+}
+
+button:focus-visible,
+.chip:focus-visible,
+.subject:focus-visible,
+.opt:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #1f7ae0;
+  outline-offset: 3px;
+}
+
+.subject-meta,
+.course-route,
+.course-progress-list {
+  color: #6f7d8b;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+  margin-top: 6px;
+}
+
+.route-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 8px;
+  margin: 4px 4px 0 0;
+  background: #eef5ff;
+  color: #315f95;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.route-badge.core {
+  background: #e9f9ef;
+  color: #19723c;
+}
+
+.route-badge.extension {
+  background: #fff3dc;
+  color: #8a5b00;
+}
+
+.feedback-detail {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.08);
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 650;
+}
+
+.feedback-detail b {
+  color: #33414f;
+}
+
+.option-explain {
+  margin-top: 6px;
+  color: #4d5f70;
+}
+
+.explain-block,
+.option-feedback {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(0,0,0,.08);
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 650;
+}
+
+.option-feedback ul {
+  margin: 8px 0 0 18px;
+}
+
+.option-feedback li {
+  margin: 4px 0;
+}
+
+.option-feedback li.ok {
+  color: #1c8f48;
+}
+
+.option-feedback li.no {
+  color: #d63b3b;
+}
+
+#qNext.show {
+  position: sticky;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 3;
+}
+
+@media (min-width: 760px) {
+  #app {
+    max-width: 760px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (min-width: 980px) and (orientation: landscape) {
+  #app {
+    max-width: 980px;
+  }
+
+  #testScreen .card.answered-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, .85fr);
+    gap: 18px;
+    align-items: start;
+  }
+
+  #testScreen .feedback.show {
+    margin-top: 0;
+    position: sticky;
+    top: 16px;
+  }
+}
+
+@media (max-width: 430px) {
+  #app {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .card {
+    border-radius: 20px;
+    padding: 20px 16px;
+  }
+
+  .question {
+    font-size: 21px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+
+  .opt {
+    width: 100%;
+    min-height: 54px;
+    padding: 14px 15px;
+    font-size: 17px;
+    line-height: 1.45;
+  }
+
+  .modebtn {
+    padding: 18px;
+    font-size: 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
