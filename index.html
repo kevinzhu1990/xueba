@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -10,6 +10,8 @@
 <meta name="theme-color" content="#ffe1cf">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E%F0%9F%8E%92%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="responsive.css?v=course-20260712">
 <title>小学霸学习乐园</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent;
@@ -388,6 +390,8 @@
 
 </div>
 
+<script src="adaptive-engine.js?v=course-20260712"></script>
+<script src="data/curriculum-enhancements.js?v=course-20260712"></script>
 <script>
 /* ============== 题库数据 ============== */
 const DATA = {
@@ -480,7 +484,7 @@ const DATA = {
     name:"动物植物", emoji:"🐢", desc:"动物和植物", color:"#56ccf2",
     cards:[
       {word:"鱼", say:"水里游", mean:"🐟 鱼通常用鳃从水里获得氧气，多数鱼离开水不能长时间生存。"},
-      {word:"鸟", say:"天上飞", mean:"🐦 鸟有翅膀和羽毛，会飞，会下蛋。"},
+      {word:"鸟", say:"有羽毛", mean:"🐦 鸟有翅膀和羽毛，多数会飞，也有企鹅、鸵鸟等不会飞的鸟。鸟类通常下蛋。"},
       {word:"植物", say:"会长大", mean:"🌱 植物需要阳光、水和空气才能长大。"},
       {word:"蜜蜂", say:"采花蜜", mean:"🐝 蜜蜂采花蜜，还能帮花朵传播花粉。"},
       {word:"青蛙", say:"会变身", mean:"🐸 青蛙小时候是蝌蚪，长大才变成青蛙。"},
@@ -957,7 +961,7 @@ const ANIMALS=[
   ["大象","用肺","走","森林","四条腿","有长鼻子"],["猴子","用肺","爬","树上","四肢","有尾巴"],
   ["老虎","用肺","跑","森林","四条腿","有条纹"],["熊猫","用肺","走","竹林","四条腿","黑白色"],
   ["鲸鱼","用肺","游泳","海里","没有腿","身体很大"],["海豚","用肺","游泳","海里","没有腿","很聪明"],
-  ["螃蟹","用鳃","横着爬","海边","八条腿","有硬壳"],["蜘蛛","用气管","爬","墙角","八条腿","会结网"],
+  ["螃蟹","用鳃","横着爬","海边","十条腿（含一对钳足）","有硬壳"],["蜘蛛","用气管","爬","墙角","八条腿","会结网"],
   ["蜗牛","用肺","爬","花园","没有腿","背着壳"],["蝙蝠","用肺","飞","山洞","两条腿","会飞的兽"],
   ["企鹅","用肺","走","南极","两条腿","不会飞的鸟"],["鸽子","用肺","飞","屋顶","两条腿","有羽毛"],
   ["长颈鹿","用肺","走","草原","四条腿","脖子很长"],["袋鼠","用肺","跳","草原","两条后腿","有育儿袋"],
@@ -1439,13 +1443,20 @@ function factCard(it, tag){
 function wordCard(word, say, mean){ return {word, say, mean}; }
 function englishWordCard(en, zh, emo, cat){
   let tip = `记忆：先看图，再听读音，最后遮住中文说出 ${en}。`;
-  let sentence = `例句：I know ${en}.`;
+  let sentence = `例句：I know this word: ${en}.`;
   if(["动物","玩具运动"].includes(cat)) sentence = `例句：I see a ${en}.`;
-  if(["水果","食物"].includes(cat)) sentence = `例句：I like ${en}.`;
+  if(cat==="水果") sentence = `例句：I like ${en}s.`;
+  if(cat==="食物") {
+    const massFood = ["rice","bread","milk","water","meat","juice"];
+    const article = /^[aeiou]/i.test(en) ? "an" : "a";
+    sentence = massFood.includes(en) ? `例句：I like ${en}.` : `例句：I want ${article} ${en}.`;
+  }
   if(cat==="颜色") sentence = `例句：It is ${en}.`;
   if(cat==="家人") sentence = `例句：This is my ${en}.`;
   if(cat==="动作") sentence = `例句：I can ${en}.`;
-  if(cat==="数字") sentence = `例句：I can count ${en}.`;
+  if(cat==="数字") sentence = `例句：I can count to ${en}.`;
+  if(cat==="情绪") sentence = `例句：I feel ${en}.`;
+  if(["形容词"].includes(cat)) sentence = `例句：It is ${en}.`;
   return wordCard(en, cat, `${emo} ${zh}\n${sentence}\n${tip}`);
 }
 function idiomStudyCard(id, mean){
@@ -1867,6 +1878,7 @@ function normalizeStore(s){
   const cutStr = cutoff.toISOString().slice(0,10);
   if(s.days) Object.keys(s.days).forEach(k=>{ if(k < cutStr) delete s.days[k]; });
   if(s.dailyStats) Object.keys(s.dailyStats).forEach(k=>{ if(k < cutStr) delete s.dailyStats[k]; });
+  if(window.XUEBA_ADAPTIVE) window.XUEBA_ADAPTIVE.ensureAdaptiveStore(s);
   return s;
 }
 function cloudEnabled(){ return !!(cloudOn() && currentChild); }
@@ -1993,7 +2005,13 @@ function mergeStores(base, incoming){
   base=normalizeStore(base||{}); incoming=normalizeStore(incoming||{});
   base.stars=Math.max(base.stars,incoming.stars); base.wrong={...incoming.wrong,...base.wrong}; base.history={...incoming.history,...base.history};
   base.qstats={...incoming.qstats,...base.qstats}; base.days={...incoming.days,...base.days}; base.answerRecords=[...(incoming.answerRecords||[]),...(base.answerRecords||[])].slice(-500);
-  base.recent=[...(incoming.recent||[]),...(base.recent||[])].slice(-30); base.tagstats={...incoming.tagstats,...base.tagstats}; return base;
+  base.recent=[...(incoming.recent||[]),...(base.recent||[])].slice(-30); base.tagstats={...incoming.tagstats,...base.tagstats};
+  base.subjectLevels={...(incoming.subjectLevels||{}),...(base.subjectLevels||{})};
+  base.mastery={...(incoming.mastery||{}),...(base.mastery||{})};
+  base.courseProgress={...(incoming.courseProgress||{}),...(base.courseProgress||{})};
+  base.unlockedExtensions={...(incoming.unlockedExtensions||{}),...(base.unlockedExtensions||{})};
+  base.dailyPlan={...(incoming.dailyPlan||{}),...(base.dailyPlan||{})};
+  return normalizeStore(base);
 }
 
 async function syncFromCloud(){
@@ -2210,7 +2228,8 @@ function subjectStats(key){
   return {key, name:DATA[key].name, attempts:h.attempts||0, correct:h.correct||0, rate, learned, wrong, total};
 }
 function allSubjectStats(){
-  return Object.keys(DATA).map(subjectStats);
+  const order = window.XUEBA_CURRICULUM?.SUBJECT_ORDER || Object.keys(DATA);
+  return order.filter(k=>DATA[k]).map(subjectStats);
 }
 function getQStat(subject, idx){
   store.qstats[subject] = store.qstats[subject] || {};
@@ -2223,6 +2242,8 @@ function getQStat(subject, idx){
   return st;
 }
 function isMastered(subject, idx){
+  const q = DATA[subject]?.questions?.[idx];
+  if(window.XUEBA_ADAPTIVE && q) return window.XUEBA_ADAPTIVE.questionMastered(store, subject, q);
   const st = store.qstats?.[subject]?.[String(idx)];
   return !!(st && st.mastered);
 }
@@ -2240,6 +2261,7 @@ function unmasteredItems(subject, lv){
   return items.filter(x=>!isMastered(subject, x.i));
 }
 function recordQuestionResult(subject, idx, isCorrect){
+  const q = DATA[subject]?.questions?.[idx];
   const st = getQStat(subject, idx);
   if(isCorrect){
     st.rightStreak++;
@@ -2250,29 +2272,49 @@ function recordQuestionResult(subject, idx, isCorrect){
     st.mastered = false;
     st.wrongs++;
   }
+  if(window.XUEBA_ADAPTIVE && q) {
+    const rec = window.XUEBA_ADAPTIVE.updateMastery(store, subject, q, isCorrect);
+    st.mastered = rec.masteryLevel >= 3;
+  }
   return st;
 }
 
 let curSubject=null, learnIdx=0;
 let testQueue=[], testIdx=0, testCorrect=0, testMode="all", answered=false;
-let lastCfg={lv:'all', count:10};
+let autoNextTimeout=null, autoNextInterval=null, isTransitioning=false;
+let lastCfg={lv:'all', count:8};
 
 /* 难度与题量配置 */
 const LV_META=[
-  {key:'all', label:'🌈 全部', sub:'综合练习'},
-  {key:1, label:'⭐ 基础', sub:'打好基础'},
-  {key:2, label:'⭐⭐ 提高', sub:'稳步进阶'},
-  {key:3, label:'⭐⭐⭐ 挑战', sub:'拓展拔高'},
+  {key:'all', label:'🌈 智能推荐', sub:'按课程优先级'},
+  ...(window.XUEBA_ADAPTIVE?.LEVEL_META || [
+    {key:1, label:'L1 认识', sub:'记住事实和概念'},
+    {key:2, label:'L2 理解', sub:'能说出原因'},
+    {key:3, label:'L3 应用', sub:'放进情境使用'},
+    {key:4, label:'L4 推理', sub:'多步分析判断'},
+    {key:5, label:'L5 挑战', sub:'综合与跨知识点'}
+  ])
 ];
-const COUNT_OPTS=[10,30,50,100,'custom'];
-let setupLv='all', setupCount=10, setupCustom=20;
+const COUNT_OPTS=window.XUEBA_ADAPTIVE?.COUNT_OPTS || [5,8,10,15];
+let setupLv='all', setupCount=8, setupCustom=8;
+
+function getSubjectLevel(subject){
+  return window.XUEBA_ADAPTIVE ? window.XUEBA_ADAPTIVE.subjectLevel(store, subject) : 2;
+}
+function setSubjectLevel(subject, level){
+  if(window.XUEBA_ADAPTIVE) window.XUEBA_ADAPTIVE.setSubjectLevel(store, subject, level);
+}
+function levelText(lv){
+  const m = LV_META.find(x=>x.key===Number(lv));
+  return m ? m.label.replace(/^[^\wL]*\s*/,"") : `L${lv}`;
+}
 
 function poolCount(lv){
   if(!curSubject) return 0;
   return unmasteredItems(curSubject, lv).length;
 }
 function openSetup(){
-  setupLv='all'; setupCount=10; setupCustom=20;
+  setupLv=getSubjectLevel(curSubject); setupCount=8; setupCustom=8;
   renderChips(); go('setupScreen');
 }
 function renderChips(){
@@ -2284,7 +2326,12 @@ function renderChips(){
     b.className='chip'+(setupLv===m.key?' sel':'')+(n===0?' disabled':'');
     b.style.opacity = n===0? .4 : 1;
     b.innerHTML=`${m.label}<small>${m.sub} · ${n}题</small>`;
-    if(n>0) b.onclick=()=>{ setupLv=m.key; if(setupCount!=='custom'&&setupCount>n)setupCount=Math.min(10,n); renderChips(); };
+    if(n>0) b.onclick=()=>{
+      setupLv=m.key;
+      if(m.key!=='all'){ setSubjectLevel(curSubject, m.key); save({skipCloud:true}); }
+      if(setupCount>n)setupCount=Math.min(8,n);
+      renderChips();
+    };
     lc.appendChild(b);
   });
   // 题量
@@ -2292,14 +2339,15 @@ function renderChips(){
   const avail=poolCount(setupLv);
   COUNT_OPTS.forEach(c=>{
     const b=document.createElement('div');
-    const isC=c==='custom';
-    const disabled = !isC && c>avail && avail>0 && c!==COUNT_OPTS.find(x=>x!=='custom'); // keep at least one
+    const isC=false;
+    const disabled = c>avail && avail>0 && c!==COUNT_OPTS[0]; // keep at least one
     b.className='chip'+(setupCount===c?' sel':'');
-    b.innerHTML= isC? '自定义' : (c+'题');
-    b.onclick=()=>{ setupCount=c; document.getElementById('customWrap').style.display=isC?'block':'none'; renderChips(); updateInfo(); };
+    b.style.opacity = disabled ? .45 : 1;
+    b.innerHTML= c+'题';
+    b.onclick=()=>{ if(disabled) return; setupCount=c; document.getElementById('customWrap').style.display='none'; renderChips(); updateInfo(); };
     cc.appendChild(b);
   });
-  document.getElementById('customWrap').style.display = setupCount==='custom'?'block':'none';
+  document.getElementById('customWrap').style.display = 'none';
   updateInfo();
 }
 function onCustomInput(){
@@ -2309,7 +2357,7 @@ function onCustomInput(){
 }
 function realCount(){
   const avail=poolCount(setupLv);
-  let n = setupCount==='custom'? setupCustom : setupCount;
+  let n = setupCount;
   return Math.max(0, Math.min(n, avail));
 }
 function updateInfo(){
@@ -2347,8 +2395,12 @@ function renderHome(){
   renderGradePanel();
   const grid = document.getElementById("subjectGrid");
   grid.innerHTML = "";
-  for(const key in DATA){
+  const order = window.XUEBA_CURRICULUM?.SUBJECT_ORDER || Object.keys(DATA);
+  order.filter(k=>DATA[k]).forEach(key=>{
     const s = DATA[key];
+    const meta = window.XUEBA_CURRICULUM?.SUBJECT_META?.[key] || {};
+    const progress = window.XUEBA_ADAPTIVE?.courseProgress(key, s.questions, store);
+    const lvl = getSubjectLevel(key);
     const wrongN = wrongCount(key);
     const rate = subjectRate(key);
     const learnedN = masteredCount(key);
@@ -2357,11 +2409,13 @@ function renderHome(){
     div.style.borderColor = s.color;
     div.innerHTML = `<span class="emoji">${s.emoji}</span>
       <div class="name">${s.name}</div>
+      <div class="route-badge">${meta.route || s.route || "课程"}</div>
+      <div class="cnt">当前 ${levelText(lvl)} · 核心进度 ${progress?.pct ?? 0}%</div>
       <div class="cnt">${s.questions.length}题 · 已会${learnedN}${wrongN?` · 错题${wrongN}`:""}</div>
       ${rate?`<div class="rate">正确率 ${rate}</div>`:"<div class=\"rate\">还没测试</div>"}`;
     div.onclick = ()=>openSubject(key);
     grid.appendChild(div);
-  }
+  });
 }
 
 function renderGradePanel(){
@@ -2395,8 +2449,8 @@ function renderHabitPanel(){
   const wrongN = totalWrong();
   const goal = 10;
   const tip = today.attempts>=goal
-    ? `今日目标完成啦！可以去错题本把小漏洞补上。`
-    : `今天再做 ${goal-today.attempts} 题就完成小目标，短短几分钟就够。`;
+    ? `今日目标完成啦！建议按：核心课程 60% · 薄弱复习 20% · 奥数能力 10% · 拓展 10%。`
+    : `今天优先做校内核心知识，再补薄弱点和错题；完成后再进入奥数或拓展。`;
   document.getElementById("habitPanel").innerHTML = `
     <div class="habit-title">今日小任务</div>
     <div class="habit-stats">
@@ -2472,6 +2526,11 @@ function renderParent(){
       .map(x=>x.tag).join("、") || "暂无";
     return `<tr><td>${c.avatar||"🧒"} ${c.name}</td><td>${gradeLabel(c.grade)}</td><td>${total}</td><td>${rate}%</td><td>${childStore.stars||c.stars||0}</td><td>${weak}</td></tr>`;
   }).join("");
+  const courseRows = stats.map(s=>{
+    const progress = window.XUEBA_ADAPTIVE?.courseProgress(s.key, DATA[s.key]?.questions||[], store);
+    const focus = (progress?.rows||[]).filter(r=>r.core && r.level<3).slice(0,3).map(r=>r.tag).join("、") || "暂无明显漏洞";
+    return `<tr><td>${s.name}</td><td>${levelText(getSubjectLevel(s.key))}</td><td>${progress?.coreMastered||0}/${progress?.coreTotal||0}</td><td>${progress?.pct||0}%</td><td>${focus}</td></tr>`;
+  }).join("");
   document.getElementById("parentCard").innerHTML = `
     <div class="mode-title">家长查看</div>
     <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · 年级：${gradeText} · ${cloudLabel()}</div>
@@ -2493,11 +2552,15 @@ function renderParent(){
       <tbody>${rows}</tbody>
     </table>
     <div class="setup-label" style="margin-top:18px">📊 知识点掌握情况</div>
+    <table class="parent-table">
+      <thead><tr><th>科目</th><th>当前等级</th><th>核心掌握</th><th>进度</th><th>下一步重点</th></tr></thead>
+      <tbody>${courseRows}</tbody>
+    </table>
     <ul style="margin:6px 0 0 18px;line-height:1.7;font-size:15px;color:#4d5f70">${weakTagsHtml}</ul>
     <div class="parent-note">
       当前推荐难度：${recArrow}。${rec.text}<br>
       最近薄弱题点：${weakDetail}<br>
-      错题规则：同一道题连续答对 5 次后，自动归入“已学会”并移出错题本。
+      掌握规则：按学科和知识点累计判断，至少要多次练习、正确率稳定，才会归入“基本掌握/熟练掌握”；错题会优先复习，不会一次猜对就跳过。
     </div>
     <button class="nextbtn show" onclick="exportProgress()" style="background:linear-gradient(135deg,#4a90e2,#56ccf2);margin-top:12px;margin-bottom:10px;">导出学习记录</button>
     <button class="nextbtn show" onclick="document.getElementById('importProgressFile').click()" style="background:#cfd9e2;color:#33414f;margin-top:0;">导入学习记录</button>
@@ -2547,8 +2610,11 @@ function importProgress(event){
 function openSubject(key){
   curSubject = key;
   const s = DATA[key];
+  const meta = window.XUEBA_CURRICULUM?.SUBJECT_META?.[key] || {};
+  const progress = window.XUEBA_ADAPTIVE?.courseProgress(key, s.questions, store);
+  const nextTags = (progress?.rows||[]).filter(r=>r.core && r.level<3).slice(0,3).map(r=>r.tag).join("、") || "可以进入应用练习或拓展";
   document.getElementById("modeSubjName").textContent = s.emoji+" "+s.name;
-  document.getElementById("modeSubjDesc").textContent = `${s.desc} · 已学会 ${masteredCount(key)} / ${s.questions.length} 题`;
+  document.getElementById("modeSubjDesc").textContent = `${meta.route || s.route || "课程"} · ${s.desc} · 当前 ${levelText(getSubjectLevel(key))} · 核心进度 ${progress?.pct||0}% · 下一步：${nextTags}`;
   const wrongN = wrongCount(key);
   document.getElementById("wrongCount").textContent = wrongN? `（还有 ${wrongN} 题）` : "（暂时没有错题，真棒！）";
   go("modeScreen");
@@ -2598,7 +2664,7 @@ function renderLearn(){
   let html;
   if(c.front!==undefined){
     // 知识卡/课程卡：上面是主题，下面是讲解
-    const lvTag = c.lv? ["","⭐","⭐⭐","⭐⭐⭐"][c.lv] : "";
+    const lvTag = c.lv ? levelText(c.lv) : "";
     html = `
       <div class="fc-sub">${c.tag||"知识点"} ${lvTag}</div>
       <div class="fc-q">${c.front.replace(/\n/g,"<br>")}</div>
@@ -2705,6 +2771,7 @@ function startTest(mode, cfg){
 }
 
 function pickPracticeQueue(subject, pool, count){
+  if(window.XUEBA_ADAPTIVE) return window.XUEBA_ADAPTIVE.pickPracticeQueue(store, subject, pool, count);
   const wrongSet = new Set(store.wrong[subject]||[]);
   const easyWrong = [], normal = [];
   pool.forEach(item=>{
@@ -2719,6 +2786,7 @@ function pickPracticeQueue(subject, pool, count){
 }
 
 function showEmpty(msg){
+  clearAutoNextTimers();
   document.getElementById("testBar").style.width="100%";
   document.querySelector("#testScreen .card").innerHTML =
     `<div class="empty"><span class="emoji">🎉</span>${msg||"太棒了！这一科没有错题了。"}<br><br>
@@ -2726,8 +2794,11 @@ function showEmpty(msg){
 }
 
 function renderQuestion(){
+  clearAutoNextTimers();
   answered=false;
+  isTransitioning=false;
   const card = document.querySelector("#testScreen .card");
+  card.classList.remove("answered-layout");
   card.innerHTML = `
     <div class="qtype" id="qType"></div>
     <div class="question" id="qText"></div>
@@ -2757,6 +2828,7 @@ function renderQuestion(){
     const correct = idx===shown.a;
     const b=document.createElement("button");
     b.className="opt"; b.textContent=text;
+    b.setAttribute("aria-label", `选项 ${idx+1}：${text}`);
     b.onclick=()=>choose(b, correct, item.i);
     box.appendChild(b);
   });
@@ -2765,6 +2837,7 @@ function renderQuestion(){
 function choose(btn, correct, qIndex){
   if(answered) return;
   answered=true;
+  document.querySelector("#testScreen .card")?.classList.add("answered-layout");
   const q = DATA[curSubject].questions[qIndex];
   recordAnswer(curSubject, correct);
   recordAnswerMeta(q, correct);                 // 最近正确率 + 知识点统计
@@ -2789,8 +2862,9 @@ function choose(btn, correct, qIndex){
   const all = document.querySelectorAll("#qOptions .opt");
   all.forEach(b=>b.classList.add("disabled"));
   const fb = document.getElementById("qFeedback");
+  const optionNotes = buildOptionFeedback(q, btn.textContent, correctText(qIndex));
   const explainHtml = q.explain
-    ? `<div style="margin-top:8px;font-weight:600;font-size:15px;line-height:1.5">📘 ${q.explain}</div>` : "";
+    ? `<div class="explain-block">📘 ${q.explain}</div>${optionNotes}` : optionNotes;
 
   if(correct){
     btn.classList.add("correct");
@@ -2801,9 +2875,10 @@ function choose(btn, correct, qIndex){
     if(qStat.mastered) removeWrong(curSubject, qIndex);
     fb.className="feedback show ok";
     const targetStreak = 5;
+    const masteredLabel = qStat.mastered ? "这个知识点已基本掌握" : `知识点还会继续复习`;
     const head = qStat.mastered
-      ? `🏆 连续答对 ${targetStreak} 次，这题已经归入“已学会”啦！以后日常测试会少考它。`
-      : pick(["🎉 答对啦！真聪明！","⭐ 太棒了！","👍 完全正确！","🌟 你真厉害！"]) + ` 连对 ${qStat.rightStreak}/${targetStreak}`;
+      ? `🏆 ${masteredLabel}。以后日常测试会少考同类题。`
+      : pick(["🎉 答对啦！","⭐ 太棒了！","👍 完全正确！","🌟 做得很好！"]) + ` ${masteredLabel}`;
     fb.innerHTML = head + explainHtml;
   } else {
     btn.classList.add("wrong");
@@ -2850,18 +2925,60 @@ function choose(btn, correct, qIndex){
   document.getElementById("qNext").classList.add("show");
   document.getElementById("qNext").textContent =
     (testIdx===testQueue.length-1)? "看成绩 →":"下一题 →";
+  fb.scrollIntoView({block:"nearest", behavior:"smooth"});
+  scheduleAutoNext();
 }
 
 function correctText(qIndex){
   return DATA[curSubject].questions[qIndex].o[ DATA[curSubject].questions[qIndex].a ];
 }
 
-function nextQuestion(){
+function buildOptionFeedback(q, userAnswer, rightAnswer){
+  const notes = Array.isArray(q.optionExplanations) ? q.optionExplanations : [];
+  if(!notes.length) {
+    return `<div class="option-feedback"><b>你的选择：</b>${userAnswer}<br><b>正确答案：</b>${rightAnswer}</div>`;
+  }
+  const rows = q.o.map((opt,i)=>{
+    const cls = opt===rightAnswer ? "ok" : opt===userAnswer ? "no" : "";
+    return `<li class="${cls}"><b>${opt}</b>：${notes[i] || (opt===rightAnswer ? "这是正确答案。" : "这个选项不符合题意。")}</li>`;
+  }).join("");
+  return `<div class="option-feedback"><b>你的选择：</b>${userAnswer}<br><b>正确答案：</b>${rightAnswer}<ul>${rows}</ul></div>`;
+}
+
+function clearAutoNextTimers(){
+  clearTimeout(autoNextTimeout);
+  clearInterval(autoNextInterval);
+  autoNextTimeout=null; autoNextInterval=null;
+}
+
+function scheduleAutoNext(){
+  clearAutoNextTimers();
+  const btn = document.getElementById("qNext");
+  if(!btn) return;
+  let sec = 3;
+  const base = testIdx===testQueue.length-1 ? "看成绩" : "下一题";
+  btn.textContent = `${base}（${sec}秒） →`;
+  autoNextInterval = setInterval(()=>{
+    sec--;
+    if(sec>0) btn.textContent = `${base}（${sec}秒） →`;
+  },1000);
+  autoNextTimeout = setTimeout(()=>goToNextQuestion(),3000);
+}
+
+function goToNextQuestion(){
+  if(isTransitioning) return;
+  isTransitioning=true;
+  clearAutoNextTimers();
   if(testIdx===testQueue.length-1){ showResult(); }
   else { testIdx++; renderQuestion(); }
 }
 
+function nextQuestion(){
+  goToNextQuestion();
+}
+
 function showResult(){
+  clearAutoNextTimers();
   document.getElementById("testBar").style.width="100%";
   go("resultScreen");
   const total = testQueue.length;
@@ -2890,6 +3007,7 @@ function showResult(){
 }
 
 function confirmQuit(){
+  clearAutoNextTimers();
   if(testIdx>0 && testIdx<testQueue.length && !confirm("还没做完，确定要退出吗？")) return;
   openSubject(curSubject);
 }
@@ -2917,16 +3035,16 @@ const GRADES = [
   {g:1, label:"一年级"}, {g:2, label:"二年级"}, {g:3, label:"三年级"},
   {g:4, label:"四年级"}, {g:5, label:"五年级"}, {g:6, label:"六年级"},
 ];
-const LEVEL_BY_LV = {1:"基础", 2:"提高", 3:"挑战"};
+const LEVEL_BY_LV = {1:"L1 认识", 2:"L2 理解", 3:"L3 应用", 4:"L4 推理", 5:"L5 挑战"};
 function gradeLabel(g){ const x=GRADES.find(z=>z.g===g); return x? x.label : "不限"; }
 
 // lv→年级基准区间（再按学科/内容微调）
 function baseGradeBand(subject, lv){
-  if(lv>=3) return [5,6];
-  if(lv===2) return [3,4];
-  // lv1：数学/英语/小科学/动植物最简单，含幼儿园大班
-  if(["english","math","biology","chemistry","physics"].includes(subject)) return [0,2];
-  if(subject==="idiom") return [2,3];   // 成语不适合幼儿园
+  if(lv>=5) return [5,6];
+  if(lv===4) return [4,5];
+  if(lv===3) return [3,4];
+  if(lv===2) return [2,3];
+  if(subject==="idiom") return [2,3];
   return [1,2];
 }
 // 命中这些关键词的题目，最低年级要往上抬，避免低年级刷到超纲科学题
@@ -3002,7 +3120,9 @@ function normalizeQuestionBank(){
       q.level     = LEVEL_BY_LV[lv] || "基础";
       q.gradeMin  = gmin;
       q.gradeMax  = gmax;
-      q.tags      = inferTags(subject, q.q);
+      const existingTags = Array.isArray(q.tags) ? q.tags.filter(Boolean) : [];
+      q.tags      = (!existingTags.length || existingTags[0]==="综合练习" || existingTags[0]==="知识点") ? inferTags(subject, q.q) : existingTags;
+      q.tag       = (!q.tag || q.tag==="综合练习" || q.tag==="知识点") ? q.tags[0] : q.tag;
       q.explain   = EXPLAIN_OVERRIDES[q.q] || buildExplain(subject, q);
       q.type      = "single-choice";
       q.source    = "自建题库";
@@ -3048,8 +3168,13 @@ function recordAnswerMeta(q, isCorrect){
   });
 }
 // 根据最近 10 题正确率推荐难度方向
-function getRecommendedLevel(){
-  const recent = (store.recent||[]).slice(-10);
+function getRecommendedLevel(subject){
+  subject = subject || curSubject;
+  if(window.XUEBA_ADAPTIVE && subject){
+    const rec = window.XUEBA_ADAPTIVE.recommendedLevel(store, subject);
+    return {dir:rec.dir, rate:rec.rate, level:`L${rec.level}`, text:rec.text};
+  }
+  const recent = (store.recent||[]).filter(r=>!subject || r.s===subject).slice(-10);
   const n = recent.length;
   if(n<4) return {dir:"stay", rate:null, level:"基础", text:"先多做几题，系统会自动判断合适的难度。"};
   const rate = Math.round(recent.filter(r=>r.c).length / n * 100);
@@ -3061,7 +3186,7 @@ function getRecommendedLevel(){
 function gradeWindow(){
   const g = store.grade;
   if(g==null) return null;                 // 不限年级
-  const rec = getRecommendedLevel();
+  const rec = getRecommendedLevel(curSubject);
   let lo = Math.max(0, g-1), hi = g;
   if(rec.dir==="up")   hi = g+1;           // 表现好：放开高一档基础题
   if(rec.dir==="down") { hi = g; lo = Math.max(0, g-1); }
@@ -3112,6 +3237,7 @@ function getParentReport(){
 
 /* ============== 启动 ============== */
 buildAll();
+if(window.applyCurriculumEnhancements) window.applyCurriculumEnhancements(DATA);
 normalizeQuestionBank();   // 给全部题目补全年级/难度/知识点/解析字段
 function initApp(){
   if(new URLSearchParams(location.search).get("admin")==="1"){
