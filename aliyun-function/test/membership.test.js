@@ -72,6 +72,59 @@ test("the same redemption code cannot be reused by the same parent", async () =>
   assert.match(JSON.parse(second.body).error, /已经兑换/);
 });
 
+test("admin can generate one-time redeem codes", async () => {
+  const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret", adminPassword: "admin-pass"});
+
+  const denied = await call(app, "POST", "/api/admin/redeem-codes", {
+    adminPassword: "bad",
+    plan: "month",
+    quantity: 1
+  });
+  assert.equal(denied.statusCode, 401);
+
+  const generated = await call(app, "POST", "/api/admin/redeem-codes", {
+    adminPassword: "admin-pass",
+    plan: "quarter",
+    quantity: 2,
+    note: "order-001"
+  });
+  assert.equal(generated.statusCode, 200);
+  const codes = JSON.parse(generated.body).codes;
+  assert.equal(codes.length, 2);
+  assert.equal(codes[0].plan, "quarter");
+  assert.match(codes[0].code, /^XUEBA-QTR-/);
+});
+
+test("generated redeem code can only be used once globally", async () => {
+  const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret", adminPassword: "admin-pass"});
+  const generated = await call(app, "POST", "/api/admin/redeem-codes", {
+    adminPassword: "admin-pass",
+    plan: "year",
+    quantity: 1
+  });
+  const code = JSON.parse(generated.body).codes[0].code;
+
+  const firstParent = await call(app, "POST", "/api/register", {
+    username: "first@example.com",
+    password: "123456",
+    displayName: "妈妈"
+  });
+  const firstToken = JSON.parse(firstParent.body).token;
+  const redeemed = await call(app, "POST", "/api/membership/redeem", {code}, firstToken);
+  assert.equal(redeemed.statusCode, 200);
+  assert.equal(JSON.parse(redeemed.body).membership.plan, "year");
+
+  const secondParent = await call(app, "POST", "/api/register", {
+    username: "second@example.com",
+    password: "123456",
+    displayName: "爸爸"
+  });
+  const secondToken = JSON.parse(secondParent.body).token;
+  const reused = await call(app, "POST", "/api/membership/redeem", {code}, secondToken);
+  assert.equal(reused.statusCode, 409);
+  assert.match(JSON.parse(reused.body).error, /已经兑换/);
+});
+
 test("parent can reset password with the family recovery code", async () => {
   const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret", recoveryCode: "xueba2026"});
   const registered = await call(app, "POST", "/api/register", {

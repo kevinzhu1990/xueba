@@ -78,6 +78,21 @@ function addDays(baseIso, days) {
   return d.toISOString();
 }
 
+function planInfo(plan) {
+  const map = {
+    month: {plan: "month", label: "月卡", days: 31, fee: "按月收费"},
+    quarter: {plan: "quarter", label: "季卡", days: 93, fee: "季度收费"},
+    year: {plan: "year", label: "年卡", days: 366, fee: "年度收费"}
+  };
+  return map[String(plan || "").trim().toLowerCase()] || null;
+}
+
+function makeRedeemCode(plan) {
+  const prefix = {month: "MON", quarter: "QTR", year: "YR"}[plan] || "VIP";
+  const raw = crypto.randomBytes(6).toString("base64url").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return `XUEBA-${prefix}-${raw.slice(0, 8)}`;
+}
+
 function defaultCodeCatalog() {
   const fromEnv = process.env.REDEEM_CODES_JSON;
   if(fromEnv) {
@@ -90,7 +105,8 @@ function createApp({
   storage,
   tokenSecret = process.env.TOKEN_SECRET || "change-me",
   redeemCodes = defaultCodeCatalog(),
-  recoveryCode = process.env.RECOVERY_CODE || process.env.FAMILY_CODE || "xueba2026"
+  recoveryCode = process.env.RECOVERY_CODE || process.env.FAMILY_CODE || "xueba2026",
+  adminPassword = process.env.ADMIN_PASSWORD || "xueba-admin-2026"
 } = {}) {
   if(!storage) throw new Error("storage is required");
 
@@ -189,8 +205,14 @@ function createApp({
     const auth = await requireUser(req);
     if(auth.error) return auth.error;
     const code = String(parseBody(req).code || "").trim().toUpperCase();
-    const item = redeemCodes[code];
+    const codeKey = `redeem-codes/${safeKey(code)}.json`;
+    const generated = await storage.get(codeKey);
+    const item = generated || redeemCodes[code];
     if(!item) return json(400, {error: "兑换码不正确，请检查大小写和横线。"});
+    if(generated && generated.redeemedAt) return json(409, {error: "这个兑换码已经兑换过了，请换一个新的兑换码。"});
+    const globalRedeemKey = `redeems/${safeKey(code)}.json`;
+    const globalRedeem = await storage.get(globalRedeemKey);
+    if(globalRedeem) return json(409, {error: "这个兑换码已经兑换过了，请换一个新的兑换码。"});
     const key = `memberships/${safeKey(auth.uid)}.json`;
     const old = (await storage.get(key)) || {};
     const usedCodes = Array.isArray(old.usedCodes) ? old.usedCodes : [];
@@ -206,8 +228,31 @@ function createApp({
       updatedAt: nowIso()
     };
     await storage.put(key, membership);
-    await storage.put(`redeems/${safeKey(code)}_${safeKey(auth.uid)}.json`, {code, owner: auth.uid, plan: item.plan, createdAt: nowIso()});
+    const redeemed = {code, owner: auth.uid, plan: item.plan, redeemedAt: nowIso()};
+    await storage.put(globalRedeemKey, redeemed);
+    if(generated) await storage.put(codeKey, {...generated, owner: auth.uid, redeemedAt: redeemed.redeemedAt});
     return json(200, {membership, active: true});
+  }
+
+  async function generateRedeemCodes(req) {
+    const body = parseBody(req);
+    if(String(body.adminPassword || "") !== adminPassword) return json(401, {error: "管理员密码不正确"});
+    const item = planInfo(body.plan);
+    if(!item) return json(400, {error: "请选择月卡、季卡或年卡"});
+    const quantity = Math.max(1, Math.min(100, Number(body.quantity) || 1));
+    const note = String(body.note || "").trim().slice(0, 80);
+    const codes = [];
+    for(let i = 0; i < quantity; i++) {
+      let code = "";
+      for(let tries = 0; tries < 5; tries++) {
+        code = makeRedeemCode(item.plan);
+        if(!(await storage.get(`redeem-codes/${safeKey(code)}.json`))) break;
+      }
+      const record = {...item, code, note, createdAt: nowIso(), redeemedAt: "", owner: ""};
+      await storage.put(`redeem-codes/${safeKey(code)}.json`, record);
+      codes.push(record);
+    }
+    return json(200, {codes});
   }
 
   async function handle(req) {
@@ -221,6 +266,7 @@ function createApp({
     if(path === "/api/progress" && (req.method === "GET" || req.method === "PUT")) return progress(req);
     if(path === "/api/membership" && req.method === "GET") return membership(req);
     if(path === "/api/membership/redeem" && req.method === "POST") return redeem(req);
+    if(path === "/api/admin/redeem-codes" && req.method === "POST") return generateRedeemCodes(req);
     return json(404, {error: "no such route"});
   }
 

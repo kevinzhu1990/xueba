@@ -197,10 +197,15 @@
   .redeem-row input{ flex:1; min-width:0; }
   .redeem-row button{ width:118px; border:0; border-radius:16px; background:linear-gradient(135deg,#4a90e2,#56ccf2); color:#fff; font-weight:900; font-size:16px; }
   .member-msg{ margin-top:8px; color:#d63b3b; font-weight:850; text-align:center; min-height:20px; }
+  .admin-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .admin-output{ width:100%; min-height:170px; resize:vertical; border:3px solid #e3ebf2; border-radius:16px; padding:14px;
+    font-size:16px; line-height:1.55; outline:none; background:#f8fbfe; color:#33414f; font-weight:750; user-select:text; }
+  .admin-help{ color:#6f7d8b; font-size:13px; line-height:1.55; font-weight:700; margin-top:10px; }
   @media (max-width:560px){
     .member-plans{ grid-template-columns:1fr; }
     .redeem-row{ flex-direction:column; }
     .redeem-row button{ width:100%; padding:14px; }
+    .admin-grid{ grid-template-columns:1fr; }
   }
 </style>
 </head>
@@ -348,6 +353,37 @@
   <div id="parentScreen" class="screen">
     <button class="backbtn" onclick="parentBack()">← 返回</button>
     <div class="card" id="parentCard"></div>
+  </div>
+
+  <!-- 兑换码后台 -->
+  <div id="adminScreen" class="screen">
+    <div class="card">
+      <div class="mode-title">会员兑换码后台</div>
+      <div class="mode-sub">生成购买后发给家长的月卡、季卡、年卡兑换码。</div>
+      <div class="auth-label">管理员密码</div>
+      <input id="adminPassword" class="auth-input" type="password" maxlength="80" autocomplete="current-password" placeholder="输入管理员密码">
+      <div class="admin-grid">
+        <div>
+          <div class="auth-label">会员类型</div>
+          <select id="adminPlan" class="auth-input">
+            <option value="month">月卡</option>
+            <option value="quarter">季卡</option>
+            <option value="year">年卡</option>
+          </select>
+        </div>
+        <div>
+          <div class="auth-label">生成数量</div>
+          <input id="adminQuantity" class="auth-input" type="number" min="1" max="100" value="1" inputmode="numeric">
+        </div>
+      </div>
+      <div class="auth-label">备注</div>
+      <input id="adminNote" class="auth-input" maxlength="80" placeholder="比如：微信订单号、客户昵称">
+      <div class="auth-error" id="adminMsg"></div>
+      <button class="startbtn" onclick="generateRedeemCodesUI()">生成兑换码</button>
+      <button class="startbtn" onclick="copyAdminCodes()" style="margin-top:10px;background:linear-gradient(135deg,#4a90e2,#56ccf2)">复制生成结果</button>
+      <textarea id="adminCodesOutput" class="admin-output" readonly placeholder="生成后的兑换码会显示在这里"></textarea>
+      <div class="admin-help">后台地址请自己保存，不要发给会员。会员只需要在学习网站的“会员兑换”里输入你发给他的兑换码。</div>
+    </div>
   </div>
 
 </div>
@@ -1573,14 +1609,6 @@ const LOCAL_CHILDREN_KEY = "xueba_local_children_v1";
 const FAMILY_CODE = "xueba2026";
 const AVATARS = ["🧒","👧","👦","🐣","🌟","🚀","🦄","🐼"];
 const MEMBERSHIP_KEY = "xueba_membership_v1";
-const REDEEM_CODES = {
-  YUEKA2026: {plan:"month", label:"月卡", days:31, fee:"按月收费"},
-  "XUEBA-MONTH-2026": {plan:"month", label:"月卡", days:31, fee:"按月收费"},
-  JIKA2026: {plan:"quarter", label:"季卡", days:93, fee:"季度收费"},
-  "XUEBA-QUARTER-2026": {plan:"quarter", label:"季卡", days:93, fee:"季度收费"},
-  NIANKA2026: {plan:"year", label:"年卡", days:366, fee:"年度收费"},
-  "XUEBA-YEAR-2026": {plan:"year", label:"年卡", days:366, fee:"年度收费"}
-};
 
 // 云端后端：阿里云函数计算（国内可访问）。家长账号、孩子档案、学习进度都存这里。
 const CLOUD_API = "https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run";
@@ -1646,28 +1674,7 @@ async function syncMembershipFromCloud(){
   }catch(e){ return null; }
 }
 function redeemMembershipCode(raw){
-  const code = String(raw||"").trim().toUpperCase();
-  const item = REDEEM_CODES[code];
-  if(!item) throw new Error("兑换码不正确，请检查大小写和横线。");
-  const map = loadMembershipMap();
-  const old = map[memberOwnerKey()] || {};
-  const usedCodes = Array.isArray(old.usedCodes) ? old.usedCodes : [];
-  if(usedCodes.includes(code)) throw new Error("这个兑换码已经兑换过了，请换一个新的兑换码。");
-  const oldExpires = Date.parse(old.expiresAt||"");
-  const baseMs = Math.max(Date.now(), isNaN(oldExpires) ? 0 : oldExpires);
-  const expires = new Date(baseMs);
-  expires.setDate(expires.getDate() + item.days);
-  map[memberOwnerKey()] = {
-    plan:item.plan,
-    label:item.label,
-    fee:item.fee,
-    expiresAt:expires.toISOString(),
-    lastCode:code,
-    usedCodes:usedCodes.concat(code),
-    updatedAt:new Date().toISOString()
-  };
-  saveMembershipMap(map);
-  return map[memberOwnerKey()];
+  throw new Error("兑换码需要连接阿里云服务器验证，请确认网络正常后再兑换。");
 }
 async function redeemMembershipCodeCloudFirst(raw){
   const code = String(raw||"").trim().toUpperCase();
@@ -1702,9 +1709,9 @@ function renderMemberPanel(){
     </div>
     <div class="member-desc">${statusText}</div>
     <div class="member-plans">
-      <div class="member-plan">月卡<small>按月收费<br>兑换码：YUEKA2026<br>XUEBA-MONTH-2026</small></div>
-      <div class="member-plan">季卡<small>季度收费<br>兑换码：JIKA2026<br>XUEBA-QUARTER-2026</small></div>
-      <div class="member-plan">年卡<small>年度收费<br>兑换码：NIANKA2026<br>XUEBA-YEAR-2026</small></div>
+      <div class="member-plan">月卡<small>按月收费<br>购买后输入专属兑换码开通</small></div>
+      <div class="member-plan">季卡<small>季度收费<br>购买后输入专属兑换码开通</small></div>
+      <div class="member-plan">年卡<small>年度收费<br>购买后输入专属兑换码开通</small></div>
     </div>
     <div class="redeem-row">
       <input id="redeemCodeInput" class="auth-input" maxlength="32" placeholder="输入兑换码">
@@ -1727,6 +1734,53 @@ async function redeemCodeUI(){
       msg.style.color="#d63b3b";
       msg.textContent = e.message || "兑换失败";
     }
+  }
+}
+
+async function generateRedeemCodesUI(){
+  const msg = document.getElementById("adminMsg");
+  const output = document.getElementById("adminCodesOutput");
+  if(msg) msg.textContent = "正在生成...";
+  try{
+    const res = await fetch(api("/api/admin/redeem-codes"), {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        adminPassword:document.getElementById("adminPassword").value,
+        plan:document.getElementById("adminPlan").value,
+        quantity:document.getElementById("adminQuantity").value,
+        note:document.getElementById("adminNote").value
+      })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || "生成失败");
+    const lines = (data.codes||[]).map(c=>`${c.code}  ${c.label}  ${c.fee}`);
+    output.value = lines.join("\n");
+    if(msg){
+      msg.style.color = "#1c8f48";
+      msg.textContent = `已生成 ${lines.length} 个兑换码`;
+    }
+  }catch(e){
+    if(msg){
+      msg.style.color = "#d63b3b";
+      msg.textContent = e.message || "生成失败";
+    }
+  }
+}
+
+async function copyAdminCodes(){
+  const output = document.getElementById("adminCodesOutput");
+  if(!output || !output.value.trim()) return;
+  output.select();
+  try{
+    await navigator.clipboard.writeText(output.value);
+    const msg = document.getElementById("adminMsg");
+    if(msg){
+      msg.style.color = "#1c8f48";
+      msg.textContent = "已复制";
+    }
+  }catch(e){
+    document.execCommand("copy");
   }
 }
 
@@ -3060,6 +3114,10 @@ function getParentReport(){
 buildAll();
 normalizeQuestionBank();   // 给全部题目补全年级/难度/知识点/解析字段
 function initApp(){
+  if(new URLSearchParams(location.search).get("admin")==="1"){
+    go("adminScreen");
+    return;
+  }
   initAuth().then(async()=>{
     if(currentParent){
       await renderChildScreen();
