@@ -35,7 +35,13 @@ test("membership endpoints require a valid parent token", async () => {
 
 test("redeeming a monthly code binds membership to the parent account", async () => {
   const storage = memoryStorage();
-  const app = createApp({storage, tokenSecret: "test-secret"});
+  const app = createApp({storage, tokenSecret: "test-secret", adminPassword: "admin-pass"});
+  const generated = await call(app, "POST", "/api/admin/redeem-codes", {
+    adminPassword: "admin-pass",
+    plan: "month",
+    quantity: 1
+  });
+  const code = JSON.parse(generated.body).codes[0].code;
   const registered = await call(app, "POST", "/api/register", {
     username: "parent@example.com",
     password: "123456",
@@ -44,13 +50,13 @@ test("redeeming a monthly code binds membership to the parent account", async ()
   assert.equal(registered.statusCode, 200);
   const token = JSON.parse(registered.body).token;
 
-  const redeemed = await call(app, "POST", "/api/membership/redeem", {code: "YUEKA2026"}, token);
+  const redeemed = await call(app, "POST", "/api/membership/redeem", {code}, token);
   assert.equal(redeemed.statusCode, 200);
   const payload = JSON.parse(redeemed.body);
   assert.equal(payload.membership.plan, "month");
   assert.equal(payload.membership.label, "月卡");
   assert.equal(payload.membership.owner, "parent@example.com");
-  assert.equal(payload.membership.usedCodes.includes("YUEKA2026"), true);
+  assert.equal(payload.membership.usedCodes.includes(code), true);
 
   const status = await call(app, "GET", "/api/membership", null, token);
   assert.equal(status.statusCode, 200);
@@ -58,7 +64,13 @@ test("redeeming a monthly code binds membership to the parent account", async ()
 });
 
 test("the same redemption code cannot be reused by the same parent", async () => {
-  const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret"});
+  const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret", adminPassword: "admin-pass"});
+  const generated = await call(app, "POST", "/api/admin/redeem-codes", {
+    adminPassword: "admin-pass",
+    plan: "quarter",
+    quantity: 1
+  });
+  const code = JSON.parse(generated.body).codes[0].code;
   const registered = await call(app, "POST", "/api/register", {
     username: "parent@example.com",
     password: "123456",
@@ -66,8 +78,8 @@ test("the same redemption code cannot be reused by the same parent", async () =>
   });
   const token = JSON.parse(registered.body).token;
 
-  assert.equal((await call(app, "POST", "/api/membership/redeem", {code: "JIKA2026"}, token)).statusCode, 200);
-  const second = await call(app, "POST", "/api/membership/redeem", {code: "JIKA2026"}, token);
+  assert.equal((await call(app, "POST", "/api/membership/redeem", {code}, token)).statusCode, 200);
+  const second = await call(app, "POST", "/api/membership/redeem", {code}, token);
   assert.equal(second.statusCode, 409);
   assert.match(JSON.parse(second.body).error, /已经兑换/);
 });

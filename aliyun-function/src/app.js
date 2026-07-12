@@ -1,13 +1,6 @@
 const crypto = require("node:crypto");
 
-const DEFAULT_REDEEM_CODES = {
-  YUEKA2026: {plan: "month", label: "月卡", days: 31, fee: "按月收费"},
-  "XUEBA-MONTH-2026": {plan: "month", label: "月卡", days: 31, fee: "按月收费"},
-  JIKA2026: {plan: "quarter", label: "季卡", days: 93, fee: "季度收费"},
-  "XUEBA-QUARTER-2026": {plan: "quarter", label: "季卡", days: 93, fee: "季度收费"},
-  NIANKA2026: {plan: "year", label: "年卡", days: 366, fee: "年度收费"},
-  "XUEBA-YEAR-2026": {plan: "year", label: "年卡", days: 366, fee: "年度收费"}
-};
+const DEFAULT_REDEEM_CODES = {};
 
 function normalizeUser(username) {
   return String(username || "").trim().toLowerCase();
