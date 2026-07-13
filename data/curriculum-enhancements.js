@@ -53,6 +53,19 @@
     status:"not_started", mastery:0
   }));
 
+  const FULL_COURSE_UNITS = {
+    math:["数与计算","图形与几何","统计与概率","综合实践","分数与小数","解决问题"],
+    reading:["字词句基础","段落阅读","阅读概括","写人记事","说明文阅读","古诗文启蒙"],
+    english:["自然拼读","基础词汇","常见句型","日常对话","短文阅读","写作表达"],
+    science:["观察与记录","物质与变化","生命世界","地球与宇宙","工程与技术","科学探究"]
+  };
+  [1,2,3,4,5,6].forEach(grade=>{
+    FULL_COURSE_UNITS.math.forEach((unit,i)=>COURSE_MAP.push({id:`math-${grade}-${i+1}`,subject:"math",grade,semester:i<3?1:2,unit,knowledgePoint:`${grade}年级${unit}`,prerequisite:[],core:true,level:grade>=4?3:2,status:"not_started",mastery:0,defaultLevel:grade>=4?3:2,order:grade*10+i}));
+  });
+  ["reading","english"].forEach(subject=>[1,2,3,4,5,6].forEach(grade=>FULL_COURSE_UNITS[subject].forEach((unit,i)=>COURSE_MAP.push({id:`${subject}-${grade}-${i+1}`,subject,grade,semester:i<3?1:2,unit,knowledgePoint:`${grade}年级${unit}`,prerequisite:[],core:true,level:grade>=4?3:2,status:"not_started",mastery:0,defaultLevel:grade>=4?3:2,order:grade*10+i}))));
+  FULL_COURSE_UNITS.science.forEach((unit,i)=>COURSE_MAP.push({id:`science-${i+1}`,subject:"comprehensive",grade:3+i%4,semester:i<3?1:2,unit,knowledgePoint:unit,prerequisite:[],core:true,level:2,status:"not_started",mastery:0,defaultLevel:2,order:100+i}));
+  COURSE_MAP.forEach((node,i)=>{node.id=node.id||`${node.subject}-${node.grade||0}-${i}`;node.defaultLevel=node.defaultLevel||node.level;node.order=node.order||i;});
+
   const PROVINCE_CAPITALS = [
     ["北京","北京"],["天津","天津"],["上海","上海"],["重庆","重庆"],["河北","石家庄"],["山西","太原"],["辽宁","沈阳"],["吉林","长春"],["黑龙江","哈尔滨"],
     ["江苏","南京"],["浙江","杭州"],["安徽","合肥"],["福建","福州"],["江西","南昌"],["山东","济南"],["河南","郑州"],["湖北","武汉"],["湖南","长沙"],

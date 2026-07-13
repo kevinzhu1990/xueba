@@ -274,6 +274,7 @@
       <div class="star-box">⭐ <span id="totalStars">0</span></div>
     </div>
     <div class="habit-panel" id="habitPanel"></div>
+    <div class="habit-panel" id="dailyPlanPanel"></div>
     <div class="habit-panel" id="gradePanel"></div>
     <div class="grid" id="subjectGrid"></div>
     <div class="footer-note">
@@ -390,7 +391,19 @@
 
 </div>
 
-<script src="adaptive-engine.js?v=course-20260712"></script>
+<script src="adaptive-engine.js?v=course-20260713"></script>
+<script src="data/questions/question-bank-loader.js?v=question-bank-20260713"></script>
+<script src="data/questions/math-extra-v2.js?v=question-bank-20260713"></script>
+<script src="data/questions/olympiad-extra-v2.js?v=question-bank-20260713"></script>
+<script src="data/questions/reading.js?v=question-bank-20260713"></script>
+<script src="data/questions/english.js?v=question-bank-20260713"></script>
+<script src="data/questions/physics.js?v=question-bank-20260713"></script>
+<script src="data/questions/chemistry.js?v=question-bank-20260713"></script>
+<script src="data/questions/biology.js?v=question-bank-20260713"></script>
+<script src="data/questions/comprehensive-extra-v2.js?v=question-bank-20260713"></script>
+<script src="data/questions/history-extra-v2.js?v=question-bank-20260713"></script>
+<script src="data/questions/geography-extra-v2.js?v=question-bank-20260713"></script>
+<script src="data/questions/idiom.js?v=question-bank-20260713"></script>
 <script src="data/curriculum-enhancements.js?v=course-20260712"></script>
 <script>
 /* ============== 题库数据 ============== */
@@ -2276,6 +2289,7 @@ function recordQuestionResult(subject, idx, isCorrect){
     const rec = window.XUEBA_ADAPTIVE.updateMastery(store, subject, q, isCorrect);
     st.mastered = rec.masteryLevel >= 3;
   }
+  updateDailyPlanProgress();
   return st;
 }
 
@@ -2392,6 +2406,7 @@ function renderHome(){
   const pb=document.getElementById("profileBtn"); if(pb) pb.textContent = activeProfile? `👤 ${activeProfile.name}` : "未登录";
   const sb=document.getElementById("soundBtn"); if(sb) sb.textContent = store.sound? "🔊":"🔇";
   renderHabitPanel();
+  renderDailyPlan();
   renderGradePanel();
   const grid = document.getElementById("subjectGrid");
   grid.innerHTML = "";
@@ -2426,13 +2441,21 @@ function renderGradePanel(){
   };
   const chips = chip(null,"不限") + GRADES.map(gr=>chip(gr.g, gr.label)).join("");
   const rec = getRecommendedLevel();
-  const tip = (cur==null)
-    ? "未选择年级时，显示全部难度的题目。选择年级后，会自动只出适合的题，低年级不会刷到超纲题。"
-    : `已按「${gradeLabel(cur)}」筛选合适的题目。${rec.rate!=null? rec.text : ""}`;
+  const limited = store.settings?.limitBySchoolGrade === true;
+  const tip = limited
+    ? (cur==null ? "已开启学校年级限制，请先选择孩子年级。" : `已按「${gradeLabel(cur)}」筛选题目。${rec.rate!=null? rec.text : ""}`)
+    : "学校年级只用于展示和推荐；当前按孩子实际能力出题，可在下方开启年级限制。";
   document.getElementById("gradePanel").innerHTML =
     `<div class="habit-title">孩子年级</div>
      <div class="chips" style="gap:8px">${chips}</div>
-     <div class="habit-tip">${tip}</div>`;
+     <div class="habit-tip">${tip}</div>
+     <label style="display:block;margin-top:10px;font-size:14px;color:#65758b"><input type="checkbox" ${limited?'checked':''} onchange="setGradeLimit(this.checked)"> 按学校年级限制题目范围</label>`;
+}
+function setGradeLimit(enabled){
+  store.settings = store.settings || {};
+  store.settings.limitBySchoolGrade = !!enabled;
+  save();
+  renderHome();
 }
 function setGrade(g){
   store.grade = g;
@@ -2459,6 +2482,51 @@ function renderHabitPanel(){
       <div class="habit-stat"><b>${wrongN}</b><span>待练错题</span></div>
     </div>
     <div class="habit-tip">${tip}</div>`;
+}
+
+let dailyActiveTaskId = null;
+function ensureDailyPlan(){
+  const date=todayKey();
+  if(store.dailyPlan && store.dailyPlan.date===date && Array.isArray(store.dailyPlan.tasks)) return store.dailyPlan;
+  const pool=(subject)=>DATA[subject]?.questions?.length ? subject : "math";
+  const focus = ["math","reading","english"][new Date().getDate()%3];
+  const extension = new Date().getDate()%2 ? pool("geography") : pool("history");
+  store.dailyPlan={date,tasks:[
+    {id:"core",title:`${DATA[focus].name}核心课程`,subject:focus,count:8,done:0},
+    {id:"language",title:"阅读与英语",subject:focus==="reading"?"english":"reading",count:5,done:0},
+    {id:"wrong",title:"错题复习",subject:focus,count:5,done:0},
+    {id:"olympiad",title:"奥数思维",subject:"olympiad",count:5,done:0},
+    {id:"extension",title:"地理/历史拓展",subject:extension,count:5,done:0}
+  ], completed:false, bonusAwarded:false};
+  save({skipCloud:true});
+  return store.dailyPlan;
+}
+function renderDailyPlan(){
+  const plan=ensureDailyPlan(), tasks=plan.tasks||[];
+  const total=tasks.reduce((n,t)=>n+t.count,0), done=tasks.reduce((n,t)=>n+Math.min(t.done||0,t.count),0);
+  const rows=tasks.map(t=>`<button class="chip${t.done>=t.count?' sel':''}" style="margin:4px 5px 0 0" onclick="startDailyTask('${t.id}')">${t.done>=t.count?'✓':'▶'} ${t.title} ${Math.min(t.done||0,t.count)}/${t.count}</button>`).join("");
+  document.getElementById("dailyPlanPanel").innerHTML=`<div class="habit-title">今日学习计划</div><div class="habit-tip">先完成核心课程，再复习错题，最后做拓展。今日进度：${done}/${total}</div><div>${rows}</div><button class="nextbtn show" style="margin-top:10px;background:linear-gradient(135deg,#7b8cff,#a06bff)" onclick="startTodayLearning()">开始今日学习</button>`;
+}
+function startTodayLearning(){
+  const t=ensureDailyPlan().tasks.find(x=>(x.done||0)<x.count)||ensureDailyPlan().tasks[0];
+  startDailyTask(t.id);
+}
+function startDailyTask(id){
+  const plan=ensureDailyPlan(), task=plan.tasks.find(x=>x.id===id); if(!task) return;
+  dailyActiveTaskId=id; curSubject=task.subject;
+  if(id==="wrong") startTest("wrong",{count:task.count});
+  else startTest("all",{lv:"all",count:task.count});
+}
+function updateDailyPlanProgress(){
+  if(!dailyActiveTaskId) return;
+  const plan=ensureDailyPlan(), task=plan.tasks.find(x=>x.id===dailyActiveTaskId); if(!task) return;
+  task.done=Math.min(task.count,(task.done||0)+1);
+  if(plan.tasks.every(t=>(t.done||0)>=t.count)){
+    plan.completed=true;
+    if(!plan.bonusAwarded){plan.bonusAwarded=true;store.stars+=10;}
+  }
+  save();
+  if(document.getElementById("dailyPlanPanel")) renderDailyPlan();
 }
 
 function openParentGate(){
@@ -3184,6 +3252,7 @@ function getRecommendedLevel(subject){
 }
 // 当前选题的有效年级窗口（按推荐结果略微放宽/收紧）
 function gradeWindow(){
+  if(store.settings?.limitBySchoolGrade !== true) return null;
   const g = store.grade;
   if(g==null) return null;                 // 不限年级
   const rec = getRecommendedLevel(curSubject);
@@ -3238,6 +3307,7 @@ function getParentReport(){
 /* ============== 启动 ============== */
 buildAll();
 if(window.applyCurriculumEnhancements) window.applyCurriculumEnhancements(DATA);
+if(window.XUEBA_QUESTION_BANK) window.XUEBA_QUESTION_BANK.append(DATA);
 normalizeQuestionBank();   // 给全部题目补全年级/难度/知识点/解析字段
 function initApp(){
   if(new URLSearchParams(location.search).get("admin")==="1"){
