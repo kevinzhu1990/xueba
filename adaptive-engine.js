@@ -32,6 +32,8 @@
     store.courseProgress = store.courseProgress || {};
     store.unlockedExtensions = store.unlockedExtensions || {};
     store.dailyPlan = store.dailyPlan || {};
+    store.settings = store.settings || {};
+    if(typeof store.settings.limitBySchoolGrade !== "boolean") store.settings.limitBySchoolGrade = false;
     return store;
   }
 
