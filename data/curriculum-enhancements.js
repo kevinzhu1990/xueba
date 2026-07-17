@@ -65,6 +65,9 @@
   ["reading","english"].forEach(subject=>[1,2,3,4,5,6].forEach(grade=>FULL_COURSE_UNITS[subject].forEach((unit,i)=>COURSE_MAP.push({id:`${subject}-${grade}-${i+1}`,subject,grade,semester:i<3?1:2,unit,knowledgePoint:`${grade}年级${unit}`,prerequisite:[],core:true,level:grade>=4?3:2,status:"not_started",mastery:0,defaultLevel:grade>=4?3:2,order:grade*10+i}))));
   FULL_COURSE_UNITS.science.forEach((unit,i)=>COURSE_MAP.push({id:`science-${i+1}`,subject:"comprehensive",grade:3+i%4,semester:i<3?1:2,unit,knowledgePoint:unit,prerequisite:[],core:true,level:2,status:"not_started",mastery:0,defaultLevel:2,order:100+i}));
   COURSE_MAP.forEach((node,i)=>{node.id=node.id||`${node.subject}-${node.grade||0}-${i}`;node.defaultLevel=node.defaultLevel||node.level;node.order=node.order||i;});
+  Object.values(window.XUEBA_DETAILED_CURRICULUM||{}).flat().forEach(node=>{
+    if(!COURSE_MAP.some(existing=>existing.id===node.id)) COURSE_MAP.push(Object.assign({status:"not_started",mastery:0,core:true,level:2,defaultLevel:2},node));
+  });
 
   const PROVINCE_CAPITALS = [
     ["北京","北京"],["天津","天津"],["上海","上海"],["重庆","重庆"],["河北","石家庄"],["山西","太原"],["辽宁","沈阳"],["吉林","长春"],["黑龙江","哈尔滨"],
