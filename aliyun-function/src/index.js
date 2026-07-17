@@ -19,6 +19,15 @@ function fileStorage() {
       const file = path.join(baseDir, key);
       await fs.promises.mkdir(path.dirname(file), {recursive: true});
       await fs.promises.writeFile(file, JSON.stringify(value), "utf8");
+    },
+    async list(prefix="") {
+      const root = path.join(baseDir, prefix);
+      const out=[];
+      async function walk(dir){
+        let entries=[];try{entries=await fs.promises.readdir(dir,{withFileTypes:true});}catch(e){if(e.code==="ENOENT")return;throw e;}
+        for(const entry of entries){const full=path.join(dir,entry.name);if(entry.isDirectory())await walk(full);else if(entry.name.endsWith(".json"))out.push(path.relative(baseDir,full).replaceAll(path.sep,"/"));}
+      }
+      await walk(root);return out;
     }
   };
 }
@@ -55,6 +64,10 @@ function ossStorage() {
       await client.put(prefix + key, Buffer.from(JSON.stringify(value), "utf8"), {
         headers: {"Content-Type": "application/json; charset=utf-8"}
       });
+    },
+    async list(prefixKey="") {
+      const result=await client.list({prefix:prefix+prefixKey,delimiter:""});
+      return (result.objects||[]).map(item=>String(item.name).slice(prefix.length));
     }
   };
 }

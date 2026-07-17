@@ -362,30 +362,9 @@
   <div id="adminScreen" class="screen">
     <div class="card">
       <div class="mode-title">会员兑换码后台</div>
-      <div class="mode-sub">生成购买后发给家长的月卡、季卡、年卡兑换码。</div>
-      <div class="auth-label">管理员密码</div>
-      <input id="adminPassword" class="auth-input" type="password" maxlength="80" autocomplete="current-password" placeholder="输入管理员密码">
-      <div class="admin-grid">
-        <div>
-          <div class="auth-label">会员类型</div>
-          <select id="adminPlan" class="auth-input">
-            <option value="month">月卡</option>
-            <option value="quarter">季卡</option>
-            <option value="year">年卡</option>
-          </select>
-        </div>
-        <div>
-          <div class="auth-label">生成数量</div>
-          <input id="adminQuantity" class="auth-input" type="number" min="1" max="100" value="1" inputmode="numeric">
-        </div>
-      </div>
-      <div class="auth-label">备注</div>
-      <input id="adminNote" class="auth-input" maxlength="80" placeholder="比如：微信订单号、客户昵称">
-      <div class="auth-error" id="adminMsg"></div>
-      <button class="startbtn" onclick="generateRedeemCodesUI()">生成兑换码</button>
-      <button class="startbtn" onclick="copyAdminCodes()" style="margin-top:10px;background:linear-gradient(135deg,#4a90e2,#56ccf2)">复制生成结果</button>
-      <textarea id="adminCodesOutput" class="admin-output" readonly placeholder="生成后的兑换码会显示在这里"></textarea>
-      <div class="admin-help">后台地址请自己保存，不要发给会员。会员只需要在学习网站的“会员兑换”里输入你发给他的兑换码。</div>
+      <div class="mode-sub">兑换码、用户、会员和操作日志请在独立后台管理。</div>
+      <a class="startbtn" href="/admin.html" style="display:block;text-decoration:none">打开管理后台 →</a>
+      <div class="admin-help">请使用管理员账号登录后台。会员只需要在学习网站的“会员兑换”里输入你发给他的兑换码。</div>
     </div>
   </div>
 
@@ -404,6 +383,10 @@
 <script src="data/questions/history-extra-v2.js?v=question-bank-20260713"></script>
 <script src="data/questions/geography-extra-v2.js?v=question-bank-20260713"></script>
 <script src="data/questions/idiom.js?v=question-bank-20260713"></script>
+<script src="data/curriculum/math-curriculum.js?v=curriculum-20260717"></script>
+<script src="data/curriculum/reading-curriculum.js?v=curriculum-20260717"></script>
+<script src="data/curriculum/english-curriculum.js?v=curriculum-20260717"></script>
+<script src="data/curriculum/science-curriculum.js?v=curriculum-20260717"></script>
 <script src="data/curriculum-enhancements.js?v=course-20260712"></script>
 <script>
 /* ============== 题库数据 ============== */
@@ -2544,6 +2527,15 @@ function openParentGate(){
 function parentBack(){
   go(currentParent ? "childScreen" : activeProfile ? "home" : "authScreen");
 }
+function getQuestionBankReport(){
+  return Object.keys(DATA||{}).map(key=>{
+    const qs=DATA[key]?.questions||[], tags=new Set(qs.map(q=>q.tag||q.unit).filter(Boolean));
+    const unique=new Set(qs.map(q=>String(q.q||"").trim())).size;
+    const progress=window.XUEBA_ADAPTIVE?.courseProgress(key,qs,store);
+    const next=(progress?.rows||[]).find(row=>row.core&&row.level<3)?.tag || (progress?.rows||[]).find(row=>row.level<3)?.tag || "已完成当前重点";
+    return {name:DATA[key].name,total:qs.length,knowledge:tags.size,learned:masteredCount(key),repeat:qs.length?Math.round((1-unique/qs.length)*100):0,next};
+  });
+}
 function renderParent(){
   const report = getParentReport();
   const stats = report.stats;
@@ -2599,6 +2591,7 @@ function renderParent(){
     const focus = (progress?.rows||[]).filter(r=>r.core && r.level<3).slice(0,3).map(r=>r.tag).join("、") || "暂无明显漏洞";
     return `<tr><td>${s.name}</td><td>${levelText(getSubjectLevel(s.key))}</td><td>${progress?.coreMastered||0}/${progress?.coreTotal||0}</td><td>${progress?.pct||0}%</td><td>${focus}</td></tr>`;
   }).join("");
+  const bankRows=getQuestionBankReport().map(x=>`<tr><td>${x.name}</td><td>${x.total}</td><td>${x.knowledge}</td><td>${x.learned}</td><td>${x.repeat}%</td><td>${x.next}</td></tr>`).join("");
   document.getElementById("parentCard").innerHTML = `
     <div class="mode-title">家长查看</div>
     <div class="mode-sub">${activeProfile?`当前孩子：${activeProfile.name}`:"当前未选择孩子"} · 年级：${gradeText} · ${cloudLabel()}</div>
@@ -2623,6 +2616,11 @@ function renderParent(){
     <table class="parent-table">
       <thead><tr><th>科目</th><th>当前等级</th><th>核心掌握</th><th>进度</th><th>下一步重点</th></tr></thead>
       <tbody>${courseRows}</tbody>
+    </table>
+    <div class="setup-label" style="margin-top:18px">🧪 题库质量与课程节点</div>
+    <table class="parent-table">
+      <thead><tr><th>科目</th><th>题库总数</th><th>知识点</th><th>已掌握</th><th>重复率</th><th>下一推荐知识点</th></tr></thead>
+      <tbody>${bankRows}</tbody>
     </table>
     <ul style="margin:6px 0 0 18px;line-height:1.7;font-size:15px;color:#4d5f70">${weakTagsHtml}</ul>
     <div class="parent-note">
