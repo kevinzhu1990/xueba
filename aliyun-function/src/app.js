@@ -252,6 +252,26 @@ function createApp({
 
   async function adminLogs(req){const auth=await requireAdmin(req);if(auth.error)return auth.error;const keys=storage.list?await storage.list("admin-logs/"):[],items=[];for(const key of keys.slice(-100))items.push(await storage.get(key));return json(200,{items:items.filter(Boolean).reverse()});}
 
+  async function exportAdminBackup(req) {
+    const auth = await requireAdmin(req, "SuperAdmin");
+    if(auth.error) return auth.error;
+    if(!storage.list) return json(503, {error: "当前存储不支持完整备份"});
+
+    await audit(auth.admin, "export_backup", "backup", "full", null, {scope: "all"}, req);
+    const keys = (await storage.list("")).filter(key => key.endsWith(".json")).sort();
+    const objects = [];
+    for(const key of keys) {
+      const value = await storage.get(key);
+      if(value !== null) objects.push({key, value});
+    }
+    return json(200, {
+      format: "xueba-backup-v1",
+      exportedAt: nowIso(),
+      objectCount: objects.length,
+      objects
+    });
+  }
+
   async function resetPassword(req) {
     const body = parseBody(req);
     const username = normalizeUser(body.username);
@@ -391,6 +411,7 @@ function createApp({
     if(path === "/api/admin/orders" && req.method === "GET") return adminOrders(req);
     if(path === "/api/admin/orders" && req.method === "POST") return createAdminOrder(req);
     if(path === "/api/admin/logs" && req.method === "GET") return adminLogs(req);
+    if(path === "/api/admin/backup/export" && req.method === "GET") return exportAdminBackup(req);
     return json(404, {error: "no such route"});
   }
 

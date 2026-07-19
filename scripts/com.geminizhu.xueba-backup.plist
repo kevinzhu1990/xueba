@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.geminizhu.xueba-backup</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/liangyanmei/.local/bin/node</string>
+    <string>/Users/liangyanmei/Library/Application Support/XuebaBackup/xueba-cloud-backup.js</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>XUEBA_ADMIN_USERNAME</key>
+    <string>617705109@qq.com</string>
+    <key>XUEBA_BACKUP_API</key>
+    <string>https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run</string>
+    <key>XUEBA_BACKUP_DIR</key>
+    <string>/Users/liangyanmei/Documents/小学霸云端备份</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>/Users/liangyanmei/Library/Logs/xueba-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/liangyanmei/Library/Logs/xueba-backup-error.log</string>
+</dict>
+</plist>

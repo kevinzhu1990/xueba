@@ -66,8 +66,14 @@ function ossStorage() {
       });
     },
     async list(prefixKey="") {
-      const result=await client.list({prefix:prefix+prefixKey,delimiter:""});
-      return (result.objects||[]).map(item=>String(item.name).slice(prefix.length));
+      const names=[];
+      let marker;
+      do {
+        const result=await client.list({prefix:prefix+prefixKey,delimiter:"",marker,"max-keys":1000});
+        names.push(...(result.objects||[]).map(item=>String(item.name).slice(prefix.length)));
+        marker=result.isTruncated ? result.nextMarker : undefined;
+      } while(marker);
+      return names;
     }
   };
 }

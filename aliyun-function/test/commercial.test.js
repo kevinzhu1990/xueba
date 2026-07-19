@@ -15,4 +15,9 @@ test("server-side admin roles and commercial workflow",async()=>{
   const logsAfterFailure=await call(app,"GET","/api/admin/logs",null,token);assert.ok(JSON.parse(logsAfterFailure.body).items.some(x=>x.action==="admin_login_failed"));
   const order=await call(app,"POST","/api/admin/orders",{plan:"quarter",buyer:"测试家长",amount:"99"},token);assert.equal(order.statusCode,200);
   assert.equal((await call(app,"GET","/api/admin/orders",null,token)).statusCode,200);
+  assert.equal((await call(app,"GET","/api/admin/backup/export",null,"invalid")).statusCode,401);
+  const backup=await call(app,"GET","/api/admin/backup/export",null,token);assert.equal(backup.statusCode,200);
+  const backupBody=JSON.parse(backup.body);assert.equal(backupBody.format,"xueba-backup-v1");assert.equal(backupBody.objectCount,backupBody.objects.length);
+  assert.ok(backupBody.objects.some(x=>x.key.startsWith("redeem-codes/")));
+  assert.ok(backupBody.objects.some(x=>x.key.startsWith("admin-logs/")&&x.value.action==="export_backup"));
 });
