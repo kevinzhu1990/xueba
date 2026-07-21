@@ -53,7 +53,7 @@ npm test
 当前函数需要在阿里云函数计算控制台上传本目录的 ZIP 并发布新版本，入口为：
 
 ```text
-src/index.handler
+index.handler
 ```
 
 运行时使用 Node.js 20。部署前在函数环境变量里配置上面的 `OSS_BUCKET`、`OSS_REGION`、`TOKEN_SECRET`、`ADMIN_JWT_SECRET` 和 `ADMIN_USERS_JSON`。
