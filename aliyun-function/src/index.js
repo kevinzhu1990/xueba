@@ -101,7 +101,7 @@ const STATIC_SECURITY_HEADERS = {
   "X-Frame-Options": "DENY",
   "Referrer-Policy": "strict-origin-when-cross-origin",
   "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
-  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline'; connect-src 'self' https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run https://cloudflareinsights.com; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 };
 
 function safePublicPath(urlPath) {
