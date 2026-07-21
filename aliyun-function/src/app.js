@@ -2,13 +2,15 @@ const crypto = require("node:crypto");
 
 const DEFAULT_REDEEM_CODES = {};
 const DEFAULT_PLANS = [
-  {id:"trial-7",name:"7天体验会员",durationDays:7,price:0,enabled:true,sortOrder:1,benefits:["基础学科"]},
-  {id:"month",name:"月卡",durationDays:31,price:0,enabled:true,sortOrder:2,benefits:["解锁全部学科"]},
-  {id:"quarter",name:"季卡",durationDays:93,price:0,enabled:true,sortOrder:3,benefits:["解锁高级题库"]},
-  {id:"half-year",name:"半年卡",durationDays:186,price:0,enabled:true,sortOrder:4,benefits:["解锁奥数和拓展"]},
-  {id:"year",name:"年卡",durationDays:366,price:0,enabled:true,sortOrder:5,benefits:["全部学习权益"]},
-  {id:"lifetime",name:"永久会员",durationDays:null,price:0,enabled:true,sortOrder:6,benefits:["永久有效"]}
+  {id:"trial-7",name:"7天体验会员",durationDays:7,price:null,enabled:true,sortOrder:1,benefits:["基础学科"]},
+  {id:"month",name:"月卡",durationDays:31,price:null,enabled:true,sortOrder:2,benefits:["解锁全部学科"]},
+  {id:"quarter",name:"季卡",durationDays:93,price:null,enabled:true,sortOrder:3,benefits:["解锁高级题库"]},
+  {id:"half-year",name:"半年卡",durationDays:186,price:null,enabled:true,sortOrder:4,benefits:["解锁奥数和拓展"]},
+  {id:"year",name:"年卡",durationDays:366,price:null,enabled:true,sortOrder:5,benefits:["全部学习权益"]},
+  {id:"lifetime",name:"永久会员",durationDays:null,price:null,enabled:true,sortOrder:6,benefits:["永久有效"]}
 ];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const rateBuckets = new Map();
 
 function normalizeUser(username) {
   return String(username || "").trim().toLowerCase();
@@ -26,8 +28,9 @@ function passwordHash(password, salt) {
   return crypto.pbkdf2Sync(String(password), salt, 120000, 32, "sha256").toString("hex");
 }
 
-function signToken(payload, secret) {
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+function signToken(payload, secret, ttlSeconds = 7 * 24 * 60 * 60) {
+  const now = Math.floor(Date.now() / 1000);
+  const body = Buffer.from(JSON.stringify({...payload, iat: now, exp: now + ttlSeconds})).toString("base64url");
   const sig = crypto.createHmac("sha256", secret).update(body).digest("base64url");
   return `${body}.${sig}`;
 }
@@ -39,7 +42,12 @@ function verifyToken(token, secret) {
   const actual = Buffer.from(sig);
   const wanted = Buffer.from(expected);
   if(actual.length !== wanted.length || !crypto.timingSafeEqual(actual, wanted)) return null;
-  try { return JSON.parse(Buffer.from(body, "base64url").toString()); } catch(e) { return null; }
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString());
+    const now = Math.floor(Date.now() / 1000);
+    if(!Number.isFinite(payload.exp) || payload.exp <= now) return null;
+    return payload;
+  } catch(e) { return null; }
 }
 
 function parseAdminUsers(raw) {
@@ -48,10 +56,55 @@ function parseAdminUsers(raw) {
 }
 
 function signAdminToken(admin, secret) {
-  return signToken({kind:"admin",adminId:admin.id,username:admin.username,role:admin.role}, secret);
+  return signToken({kind:"admin",adminId:admin.id,username:admin.username,role:admin.role}, secret, 8 * 60 * 60);
 }
 
 function roleRank(role) { return ({Operator:1,Admin:2,SuperAdmin:3}[role] || 0); }
+
+function requestIp(req) {
+  const h = req.headers || {};
+  return String(h["x-forwarded-for"] || h["X-Forwarded-For"] || h["x-real-ip"] || "unknown").split(",")[0].trim();
+}
+
+function rateLimited(req, scope, identity, limit, windowMs) {
+  const now = Date.now();
+  const key = `${scope}:${requestIp(req)}:${String(identity || "unknown").slice(0, 100)}`;
+  const current = rateBuckets.get(key);
+  if(!current || now >= current.resetAt) {
+    rateBuckets.set(key, {count: 1, resetAt: now + windowMs});
+    return false;
+  }
+  current.count += 1;
+  if(rateBuckets.size > 2000) {
+    for(const [bucketKey, value] of rateBuckets) if(now >= value.resetAt) rateBuckets.delete(bucketKey);
+  }
+  return current.count > limit;
+}
+
+function cleanText(value, maxLength) {
+  return String(value || "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, maxLength);
+}
+
+function validChildId(value) {
+  return /^[a-zA-Z0-9_-]{1,80}$/.test(String(value || ""));
+}
+
+function normalizeChild(item) {
+  if(!item || !validChildId(item.id)) return null;
+  const name = cleanText(item.name, 30);
+  if(!name) return null;
+  const grade = item.grade === null || item.grade === "" ? null : Number(item.grade);
+  return {
+    id: String(item.id),
+    name,
+    grade: grade === null || (Number.isInteger(grade) && grade >= 0 && grade <= 6) ? grade : null,
+    avatar: cleanText(item.avatar, 8) || "🧒",
+    stars: Math.max(0, Math.min(10000000, Number(item.stars) || 0)),
+    createdAt: cleanText(item.createdAt, 40) || nowIso(),
+    updatedAt: cleanText(item.updatedAt, 40) || nowIso(),
+    lastStudyAt: cleanText(item.lastStudyAt, 40)
+  };
+}
 
 function json(statusCode, payload) {
   return {
@@ -62,7 +115,11 @@ function json(statusCode, payload) {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET,POST,PUT,OPTIONS",
       "Access-Control-Allow-Headers": "Content-Type,Authorization",
-      "Access-Control-Max-Age": "86400"
+      "Access-Control-Max-Age": "86400",
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "no-referrer",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
     },
     body: JSON.stringify(payload)
   };
@@ -119,7 +176,6 @@ function createApp({
   storage,
   tokenSecret = process.env.TOKEN_SECRET || "change-me",
   redeemCodes = defaultCodeCatalog(),
-  recoveryCode = process.env.RECOVERY_CODE || process.env.FAMILY_CODE || "xueba2026",
   adminPassword = process.env.ADMIN_PASSWORD || "",
   adminUsers = parseAdminUsers(process.env.ADMIN_USERS_JSON),
   adminSecret = process.env.ADMIN_JWT_SECRET || tokenSecret
@@ -128,7 +184,12 @@ function createApp({
 
   async function currentUser(req) {
     const payload = verifyToken(bearer(req), tokenSecret);
-    return payload && payload.uid ? normalizeUser(payload.uid) : null;
+    if(!payload || !payload.uid) return null;
+    const uid = normalizeUser(payload.uid);
+    const user = await storage.get(`parents/${safeKey(uid)}.json`);
+    if(!user || user.status === "frozen") return null;
+    if(Number(payload.v || 0) !== Number(user.tokenVersion || 0)) return null;
+    return uid;
   }
 
   async function currentAdmin(req) {
@@ -160,31 +221,34 @@ function createApp({
     const body = parseBody(req);
     const username = normalizeUser(body.username);
     const password = String(body.password || "");
-    const displayName = String(body.displayName || "家长").trim() || "家长";
-    if(!username || password.length < 6) return json(400, {error: "请输入账号和至少 6 位密码"});
+    const displayName = cleanText(body.displayName || "家长", 40) || "家长";
+    if(rateLimited(req, "register", username, 5, 30 * 60 * 1000)) return json(429, {error: "注册尝试过于频繁，请稍后再试"});
+    if(!EMAIL_RE.test(username) || password.length < 8 || password.length > 128) return json(400, {error: "请输入有效邮箱和至少 8 位密码"});
     const key = `parents/${safeKey(username)}.json`;
     const existing = await storage.get(key);
     if(existing) return json(409, {error: "这个账号已注册，请直接登录"});
     const salt = crypto.randomBytes(16).toString("hex");
-    const user = {username, displayName, salt, passwordHash: passwordHash(password, salt), status:"active", createdAt: nowIso(), updatedAt: nowIso(), loginCount:0, lastLoginAt:null};
+    const user = {username, displayName, salt, passwordHash: passwordHash(password, salt), tokenVersion:0, status:"active", createdAt: nowIso(), updatedAt: nowIso(), loginCount:0, lastLoginAt:null};
     await storage.put(key, user);
-    return json(200, {displayName, token: signToken({uid: username, role: "parent"}, tokenSecret)});
+    return json(200, {displayName, token: signToken({uid: username, role: "parent", v:0}, tokenSecret)});
   }
 
   async function login(req) {
     const body = parseBody(req);
     const username = normalizeUser(body.username);
     const password = String(body.password || "");
+    if(rateLimited(req, "login", username, 10, 15 * 60 * 1000)) return json(429, {error: "登录尝试过于频繁，请 15 分钟后再试"});
     const user = await storage.get(`parents/${safeKey(username)}.json`);
     if(!user || user.passwordHash !== passwordHash(password, user.salt)) return json(401, {error: "账号或密码不正确"});
     if(user.status==="frozen") return json(403,{error:"账号已被冻结，请联系客服"});
     user.loginCount=(Number(user.loginCount)||0)+1;user.lastLoginAt=nowIso();user.updatedAt=nowIso();await storage.put(`parents/${safeKey(username)}.json`,user);
     await storage.put(`login-events/${Date.now()}-${crypto.randomBytes(3).toString("hex")}.json`,{username,createdAt:user.lastLoginAt});
-    return json(200, {displayName: user.displayName || "家长", token: signToken({uid: username, role: "parent"}, tokenSecret)});
+    return json(200, {displayName: user.displayName || "家长", token: signToken({uid: username, role: "parent", v:Number(user.tokenVersion || 0)}, tokenSecret)});
   }
 
   async function adminLogin(req) {
     const body=parseBody(req),username=normalizeUser(body.username),password=String(body.password||"");
+    if(rateLimited(req, "admin-login", username, 8, 30 * 60 * 1000)) return json(429,{error:"管理员登录尝试过于频繁，请稍后再试"});
     const admin=adminUsers.find(x=>normalizeUser(x.username)===username && x.enabled!==false);
     if(!admin) {
       await storage.put(`admin-logs/${Date.now()}-${crypto.randomBytes(3).toString("hex")}.json`,{adminId:"unknown",action:"admin_login_failed",targetType:"admin",targetId:username||"unknown",createdAt:nowIso(),ipMasked:"masked",userAgent:""});
@@ -220,6 +284,27 @@ function createApp({
     const auth=await requireAdmin(req,"Admin");if(auth.error)return auth.error;const key=`parents/${safeKey(username)}.json`,user=await storage.get(key);if(!user)return json(404,{error:"用户不存在"});
     if(action==="delete") return json(409,{error:"为保留学习和审计记录，账号请先冻结；物理删除需执行数据保留流程"});
     const before={status:user.status};user.status=action==="freeze"?"frozen":"active";user.updatedAt=nowIso();await storage.put(key,user);await audit(auth.admin,action,"user",username,before,{status:user.status},req);return json(200,{ok:true,status:user.status});
+  }
+
+  async function createPasswordResetCode(req, username) {
+    const auth = await requireAdmin(req, "Admin");
+    if(auth.error) return auth.error;
+    username = normalizeUser(username);
+    const user = await storage.get(`parents/${safeKey(username)}.json`);
+    if(!user) return json(404, {error:"用户不存在"});
+    const resetCode = crypto.randomBytes(18).toString("base64url").toUpperCase();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const record = {
+      username,
+      codeHash: sha256(resetCode),
+      expiresAt,
+      createdAt: nowIso(),
+      createdBy: auth.admin.id,
+      usedAt: null
+    };
+    await storage.put(`password-resets/${safeKey(username)}.json`, record);
+    await audit(auth.admin, "create_password_reset_code", "user", username, null, {expiresAt}, req);
+    return json(200, {resetCode, expiresAt});
   }
 
   async function adminRedeemList(req) {
@@ -276,9 +361,14 @@ function createApp({
     const body = parseBody(req);
     const username = normalizeUser(body.username);
     const password = String(body.password || "");
-    const code = String(body.recoveryCode || "").trim();
-    if(!username || password.length < 6) return json(400, {error: "请输入账号和至少 6 位新密码"});
-    if(!recoveryCode || code !== recoveryCode) return json(403, {error: "家庭验证码不正确"});
+    const code = String(body.recoveryCode || body.resetCode || "").trim().toUpperCase();
+    if(rateLimited(req, "password-reset", username, 6, 30 * 60 * 1000)) return json(429, {error:"重置尝试过于频繁，请稍后再试"});
+    if(!EMAIL_RE.test(username) || password.length < 8 || password.length > 128) return json(400, {error: "请输入有效邮箱和至少 8 位新密码"});
+    const resetKey = `password-resets/${safeKey(username)}.json`;
+    const reset = await storage.get(resetKey);
+    if(!reset || reset.usedAt || Date.parse(reset.expiresAt || "") <= Date.now() || sha256(code) !== reset.codeHash) {
+      return json(403, {error: "重置码不正确、已使用或已过期，请联系管理员重新生成"});
+    }
     const key = `parents/${safeKey(username)}.json`;
     const user = await storage.get(key);
     if(!user) return json(404, {error: "这个账号还没有注册，请先注册家长账号"});
@@ -287,13 +377,15 @@ function createApp({
       ...user,
       salt,
       passwordHash: passwordHash(password, salt),
+      tokenVersion: Number(user.tokenVersion || 0) + 1,
       updatedAt: nowIso(),
       passwordResetAt: nowIso()
     };
     await storage.put(key, updated);
+    await storage.put(resetKey, {...reset, usedAt: nowIso()});
     return json(200, {
       displayName: updated.displayName || "家长",
-      token: signToken({uid: username, role: "parent"}, tokenSecret)
+      token: signToken({uid: username, role: "parent", v:updated.tokenVersion}, tokenSecret)
     });
   }
 
@@ -302,7 +394,10 @@ function createApp({
     if(auth.error) return auth.error;
     const key = `children/${safeKey(auth.uid)}.json`;
     if(req.method === "GET") return json(200, {children: (await storage.get(key)) || []});
-    const list = Array.isArray(parseBody(req).children) ? parseBody(req).children : [];
+    const raw = parseBody(req).children;
+    if(!Array.isArray(raw) || raw.length > 20) return json(400, {error:"孩子档案格式不正确或数量超过 20 个"});
+    const list = raw.map(normalizeChild);
+    if(list.some(item=>!item)) return json(400, {error:"孩子档案包含无效字段"});
     await storage.put(key, list);
     return json(200, {ok: true, children: list});
   }
@@ -313,19 +408,37 @@ function createApp({
     if(req.method === "GET") {
       const child = req.query?.child || new URL(req.url || "http://local").searchParams.get("child");
       if(!child) return json(400, {error: "missing child"});
-      return json(200, {store: (await storage.get(`progress/${safeKey(auth.uid)}/${safeKey(child)}.json`)) || {}});
+      if(!validChildId(child)) return json(400, {error:"invalid child"});
+      const childrenList = (await storage.get(`children/${safeKey(auth.uid)}.json`)) || [];
+      if(!childrenList.some(item=>item.id===child)) return json(403, {error:"child does not belong to this account"});
+      const saved = (await storage.get(`progress/${safeKey(auth.uid)}/${safeKey(child)}.json`)) || {};
+      if(saved && saved.format === "xueba-progress-v2") return json(200, {store:saved.store || {}, revision:Number(saved.revision || 0)});
+      return json(200, {store:saved, revision:0});
     }
     const body = parseBody(req);
-    if(!body.childId) return json(400, {error: "missing childId"});
-    await storage.put(`progress/${safeKey(auth.uid)}/${safeKey(body.childId)}.json`, body.store || {});
-    return json(200, {ok: true});
+    if(!validChildId(body.childId)) return json(400, {error: "missing or invalid childId"});
+    if(Buffer.byteLength(JSON.stringify(body.store || {}), "utf8") > 1024 * 1024) return json(413, {error:"学习记录过大"});
+    const childrenList = (await storage.get(`children/${safeKey(auth.uid)}.json`)) || [];
+    if(!childrenList.some(item=>item.id===body.childId)) return json(403, {error:"child does not belong to this account"});
+    const progressKey = `progress/${safeKey(auth.uid)}/${safeKey(body.childId)}.json`;
+    const saved = (await storage.get(progressKey)) || {};
+    const currentRevision = saved && saved.format === "xueba-progress-v2" ? Number(saved.revision || 0) : 0;
+    if(!Number.isInteger(body.baseRevision)) return json(428, {error:"missing progress revision", store:saved.store || saved, revision:currentRevision});
+    if(body.baseRevision !== currentRevision) return json(409, {error:"progress conflict", store:saved.store || saved, revision:currentRevision});
+    const revision = currentRevision + 1;
+    await storage.put(progressKey, {format:"xueba-progress-v2", revision, updatedAt:nowIso(), store:body.store || {}});
+    return json(200, {ok: true, revision});
   }
 
   async function membership(req) {
     const auth = await requireUser(req);
     if(auth.error) return auth.error;
     const member = await storage.get(`memberships/${safeKey(auth.uid)}.json`);
-    return json(200, {membership: member || null, active: !!(member && Date.parse(member.expiresAt) > Date.now())});
+    const active = !!(member && (member.plan === "lifetime" || Date.parse(member.expiresAt) > Date.now()));
+    const entitlements = active
+      ? {tier:"premium", subjects:"all", maxLevel:5}
+      : {tier:"free", subjects:["math","reading","english","idiom"], maxLevel:2};
+    return json(200, {membership: member || null, active, entitlements});
   }
 
   async function redeem(req) {
@@ -399,7 +512,8 @@ function createApp({
     if(path === "/api/admin/login" && req.method === "POST") return adminLogin(req);
     if(path === "/api/admin/dashboard" && req.method === "GET") return adminDashboard(req);
     if(path === "/api/admin/users" && req.method === "GET") return listAdminUsers(req);
-    if(path.startsWith("/api/admin/users/") && req.method === "POST") return adminUserAction(req,path.split("/")[4],parseBody(req).action||"freeze");
+    if(path.startsWith("/api/admin/users/") && req.method === "POST") return adminUserAction(req,decodeURIComponent(path.split("/")[4]||""),parseBody(req).action||"freeze");
+    if(path.startsWith("/api/admin/password-reset/") && req.method === "POST") return createPasswordResetCode(req,decodeURIComponent(path.split("/")[4]||""));
     if(path === "/api/admin/redeem-codes" && req.method === "GET") return adminRedeemList(req);
     if(path === "/api/children" && (req.method === "GET" || req.method === "PUT")) return children(req);
     if(path === "/api/progress" && (req.method === "GET" || req.method === "PUT")) return progress(req);

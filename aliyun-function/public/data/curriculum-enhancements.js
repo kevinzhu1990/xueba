@@ -286,7 +286,8 @@
     });
     COURSE_MAP.forEach(kp=>{
       if(!DATA[kp.subject]) return;
-      addCard(DATA, kp.subject, `${kp.grade}年级${kp.semester}册 · ${kp.unit}`, `知识点：${kp.knowledgePoint}\n前置知识：${kp.prerequisite.join("、") || "无"}\n路线：${kp.core ? "校内课程主线" : "拓展副线"}`, kp.unit, kp.level);
+      const prerequisites = Array.isArray(kp.prerequisite) ? kp.prerequisite : (Array.isArray(kp.prerequisites) ? kp.prerequisites : []);
+      addCard(DATA, kp.subject, `${kp.grade}年级${kp.semester}册 · ${kp.unit}`, `知识点：${kp.knowledgePoint}\n前置知识：${prerequisites.join("、") || "无"}\n路线：${kp.core ? "校内课程主线" : "拓展副线"}`, kp.unit, kp.level);
     });
   }
 

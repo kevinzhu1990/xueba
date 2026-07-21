@@ -27,6 +27,8 @@ async function call(app, method, path, body, token) {
   });
 }
 
+const GOOD_PASSWORD = "study-123456";
+
 test("membership endpoints require a valid parent token", async () => {
   const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret"});
   const res = await call(app, "GET", "/api/membership");
@@ -44,7 +46,7 @@ test("redeeming a monthly code binds membership to the parent account", async ()
   const code = JSON.parse(generated.body).codes[0].code;
   const registered = await call(app, "POST", "/api/register", {
     username: "parent@example.com",
-    password: "123456",
+    password: GOOD_PASSWORD,
     displayName: "妈妈"
   });
   assert.equal(registered.statusCode, 200);
@@ -73,7 +75,7 @@ test("the same redemption code cannot be reused by the same parent", async () =>
   const code = JSON.parse(generated.body).codes[0].code;
   const registered = await call(app, "POST", "/api/register", {
     username: "parent@example.com",
-    password: "123456",
+    password: GOOD_PASSWORD,
     displayName: "妈妈"
   });
   const token = JSON.parse(registered.body).token;
@@ -118,7 +120,7 @@ test("generated redeem code can only be used once globally", async () => {
 
   const firstParent = await call(app, "POST", "/api/register", {
     username: "first@example.com",
-    password: "123456",
+    password: GOOD_PASSWORD,
     displayName: "妈妈"
   });
   const firstToken = JSON.parse(firstParent.body).token;
@@ -128,7 +130,7 @@ test("generated redeem code can only be used once globally", async () => {
 
   const secondParent = await call(app, "POST", "/api/register", {
     username: "second@example.com",
-    password: "123456",
+    password: GOOD_PASSWORD,
     displayName: "爸爸"
   });
   const secondToken = JSON.parse(secondParent.body).token;
@@ -137,11 +139,16 @@ test("generated redeem code can only be used once globally", async () => {
   assert.match(JSON.parse(reused.body).error, /已经兑换/);
 });
 
-test("parent can reset password with the family recovery code", async () => {
-  const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret", recoveryCode: "xueba2026"});
+test("admin can issue a one-time password reset code", async () => {
+  const salt = "admin-test-salt";
+  const admin = {
+    id:"admin-1", username:"admin@example.com", role:"SuperAdmin", enabled:true, salt,
+    passwordHash: require("node:crypto").pbkdf2Sync("admin-password", salt, 120000, 32, "sha256").toString("hex")
+  };
+  const app = createApp({storage: memoryStorage(), tokenSecret: "test-secret", adminSecret:"admin-secret", adminUsers:[admin]});
   const registered = await call(app, "POST", "/api/register", {
     username: "parent@example.com",
-    password: "123456",
+    password: GOOD_PASSWORD,
     displayName: "妈妈"
   });
   assert.equal(registered.statusCode, 200);
@@ -152,17 +159,24 @@ test("parent can reset password with the family recovery code", async () => {
   });
   assert.equal(badLogin.statusCode, 401);
 
-  const badCode = await call(app, "POST", "/api/password/reset", {
+  const oldPublicCode = await call(app, "POST", "/api/password/reset", {
     username: "parent@example.com",
     password: "newpass123",
-    recoveryCode: "bad-code"
+    recoveryCode: "xueba2026"
   });
-  assert.equal(badCode.statusCode, 403);
+  assert.equal(oldPublicCode.statusCode, 403);
+
+  const adminLogin = await call(app, "POST", "/api/admin/login", {username:admin.username,password:"admin-password"});
+  assert.equal(adminLogin.statusCode, 200);
+  const adminToken = JSON.parse(adminLogin.body).token;
+  const issued = await call(app, "POST", "/api/admin/password-reset/parent%40example.com", {}, adminToken);
+  assert.equal(issued.statusCode, 200);
+  const resetCode = JSON.parse(issued.body).resetCode;
 
   const reset = await call(app, "POST", "/api/password/reset", {
     username: "parent@example.com",
     password: "newpass123",
-    recoveryCode: "xueba2026"
+    recoveryCode: resetCode
   });
   assert.equal(reset.statusCode, 200);
   assert.ok(JSON.parse(reset.body).token);
@@ -172,4 +186,28 @@ test("parent can reset password with the family recovery code", async () => {
     password: "newpass123"
   });
   assert.equal(login.statusCode, 200);
+
+  const reused = await call(app, "POST", "/api/password/reset", {
+    username: "parent@example.com",
+    password: "another-pass",
+    recoveryCode: resetCode
+  });
+  assert.equal(reused.statusCode, 403);
+});
+
+test("progress updates use revisions to prevent one device overwriting another", async () => {
+  const app = createApp({storage: memoryStorage(), tokenSecret:"progress-secret"});
+  const registered = await call(app, "POST", "/api/register", {username:"sync@example.com",password:GOOD_PASSWORD,displayName:"家长"});
+  const token = JSON.parse(registered.body).token;
+  const child = {id:"child-1",name:"小明",grade:4,avatar:"⭐"};
+  assert.equal((await call(app,"PUT","/api/children",{children:[child]},token)).statusCode,200);
+
+  const first = await call(app,"PUT","/api/progress",{childId:child.id,baseRevision:0,store:{stars:1}},token);
+  assert.equal(first.statusCode,200);
+  assert.equal(JSON.parse(first.body).revision,1);
+
+  const stale = await call(app,"PUT","/api/progress",{childId:child.id,baseRevision:0,store:{stars:2}},token);
+  assert.equal(stale.statusCode,409);
+  assert.equal(JSON.parse(stale.body).revision,1);
+  assert.deepEqual(JSON.parse(stale.body).store,{stars:1});
 });

@@ -1,2 +1,6 @@
 node_modules/
 *.zip
+._*
+.DS_Store
+.playwright-cli/
+output/

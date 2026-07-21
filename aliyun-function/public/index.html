@@ -11,7 +11,7 @@
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E%F0%9F%8E%92%3C/text%3E%3C/svg%3E">
-<link rel="stylesheet" href="responsive.css?v=course-20260712">
+<link rel="stylesheet" href="responsive.css?v=security-sync-20260721">
 <title>小学霸学习乐园</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent;
@@ -221,17 +221,19 @@
         <div class="auth-emoji">🎒</div>
         <div class="auth-title">小学霸学习乐园</div>
         <div class="auth-sub">家长登录后可以管理多个孩子档案，并把学习记录同步到云端。<br>也可以先用游客模式体验。</div>
+        <form onsubmit="event.preventDefault();loginParentUI()">
         <div class="auth-label">家长邮箱</div>
         <input id="parentEmail" class="auth-input" maxlength="80" autocomplete="email" placeholder="parent@example.com">
         <div class="auth-label">密码</div>
-        <input id="parentPassword" class="auth-input" type="password" maxlength="40" autocomplete="current-password" placeholder="至少 6 位">
+        <input id="parentPassword" class="auth-input" type="password" maxlength="128" autocomplete="current-password" placeholder="至少 8 位">
         <div class="auth-label">家长昵称（注册时填写）</div>
         <input id="parentName" class="auth-input" maxlength="16" autocomplete="name" placeholder="比如：妈妈">
         <div class="auth-error" id="loginError"></div>
-        <button class="startbtn" onclick="loginParentUI()">家长登录 →</button>
-        <button class="startbtn" onclick="registerParentUI()" style="margin-top:10px;background:linear-gradient(135deg,#4a90e2,#56ccf2)">注册家长账号</button>
-        <button class="plain-link" onclick="startGuest()">游客体验</button>
-        <button class="plain-link" onclick="forgotPassword()" style="color:#9aa7b4;font-size:13px;margin-top:4px">忘记密码？</button>
+        <button class="startbtn" type="submit">家长登录 →</button>
+        <button class="startbtn" type="button" onclick="registerParentUI()" style="margin-top:10px;background:linear-gradient(135deg,#4a90e2,#56ccf2)">注册家长账号</button>
+        <button class="plain-link" type="button" onclick="startGuest()">游客体验</button>
+        <button class="plain-link" type="button" onclick="forgotPassword()" style="color:#9aa7b4;font-size:13px;margin-top:4px">忘记密码？</button>
+        </form>
         <div class="auth-tip">登录后星星、错题、学习记录自动保存到阿里云，换手机换电脑都不丢失。也可游客体验（记录仅存本机）。</div>
       </div>
     </div>
@@ -1611,20 +1613,20 @@ function genCards(){
 const BASE_SAVE_KEY = "xueba_save_v1";
 const PROFILE_KEY = "xueba_active_profile_v1";
 const PARENT_SESSION_KEY = "xueba_parent_session_v1";
-const LOCAL_PARENT_KEY = "xueba_local_parent_accounts_v1";
 const LOCAL_CHILDREN_KEY = "xueba_local_children_v1";
-const FAMILY_CODE = "xueba2026";
 const AVATARS = ["🧒","👧","👦","🐣","🌟","🚀","🦄","🐼"];
 const MEMBERSHIP_KEY = "xueba_membership_v1";
 
 // 云端后端：阿里云函数计算（国内可访问）。家长账号、孩子档案、学习进度都存这里。
-const CLOUD_API = "https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run";
+const CLOUD_API = /(^|\.)geminizhu\.top$/i.test(location.hostname)
+  ? location.origin
+  : "https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run";
 function api(p){ return CLOUD_API.replace(/\/$/,'') + p; }
 function authHeaders(){ const h={'Content-Type':'application/json'}; if(currentParent&&currentParent.token) h['Authorization']='Bearer '+currentParent.token; return h; }
 function cloudOn(){ return !!(CLOUD_API && currentParent && currentParent.token); }
 function cloudErrorMessage(action, status, data){
   if(status>=500) return "阿里云服务器当前异常（"+status+"），暂时无法"+action+"。这不是密码问题，请稍后再试；也可以先用游客体验。";
-  if(action==="登录" && status===401) return "账号或密码不正确。请检查邮箱和密码；如果忘记密码，点下面“忘记密码”用家庭验证码重设。";
+  if(action==="登录" && status===401) return "账号或密码不正确。请检查邮箱和密码；如果忘记密码，请联系管理员获取一次性重置码。";
   if(action==="注册" && status===409) return "这个账号已注册。请直接登录；如果忘记密码，点下面“忘记密码”重设。";
   return (data&&data.error) || (action+"失败");
 }
@@ -1632,6 +1634,8 @@ function cloudErrorMessage(action, status, data){
 let cloudTimer = null;
 let cloudState = "local";
 let cloudReady = false;
+let progressRevision = 0;
+let cloudBaseStore = null;
 let currentParent = loadParentSession();
 let currentChild = null;
 let childrenCache = [];
@@ -1644,10 +1648,8 @@ async function initAuth(){ cloudReady = !!CLOUD_API; return cloudReady; }
 function getCurrentUser(){ return currentParent; }
 function onAuthStateChangedHandler(callback){ callback(currentParent); }
 
-function localParentAccounts(){ try{return JSON.parse(localStorage.getItem(LOCAL_PARENT_KEY)||'{}');}catch(e){return{};} }
-function saveLocalParentAccounts(accounts){ localStorage.setItem(LOCAL_PARENT_KEY, JSON.stringify(accounts)); }
-function localPasswordToken(password){ return btoa(unescape(encodeURIComponent(String(password||'')))); }
-function parentUidFromEmail(email){ return 'local_'+profileId(email); }
+// 旧版曾缓存可逆的本地密码凭据。云端认证启用后立即清除，学习记录使用其他 key，不受影响。
+localStorage.removeItem("xueba_local_parent_accounts_v1");
 function loadParentSession(){ try{return JSON.parse(localStorage.getItem(PARENT_SESSION_KEY)||'null');}catch(e){return null;} }
 function saveParentSession(parent){ parent ? localStorage.setItem(PARENT_SESSION_KEY, JSON.stringify(parent)) : localStorage.removeItem(PARENT_SESSION_KEY); }
 function loadMembershipMap(){ try{return JSON.parse(localStorage.getItem(MEMBERSHIP_KEY)||"{}");}catch(e){return{};} }
@@ -1657,12 +1659,21 @@ function dateText(iso){ if(!iso) return ""; const d=new Date(iso); return isNaN(
 function currentMembership(){
   const m = loadMembershipMap()[memberOwnerKey()] || null;
   if(!m) return null;
+  if(m.plan === "lifetime") return m;
   const expires = Date.parse(m.expiresAt||"");
   return isNaN(expires) ? null : m;
 }
 function activeMembership(){
   const m = currentMembership();
-  return m && Date.parse(m.expiresAt) > Date.now() ? m : null;
+  return m && (m.plan === "lifetime" || Date.parse(m.expiresAt) > Date.now()) ? m : null;
+}
+const FREE_SUBJECTS = new Set(["math","reading","english","idiom"]);
+function hasPremiumAccess(){ return !!activeMembership(); }
+function canAccessSubject(subject){ return hasPremiumAccess() || FREE_SUBJECTS.has(subject); }
+function maxAccessibleLevel(){ return hasPremiumAccess() ? 5 : 2; }
+function showMembershipRequired(){
+  if(currentParent){ alert("这部分属于会员内容，请先兑换月卡、季卡或年卡。"); renderChildScreen(); }
+  else { alert("这部分属于会员内容，请先注册或登录家长账号，再兑换会员码。"); go("authScreen"); }
 }
 function saveCurrentMembership(membership){
   if(!membership) return;
@@ -1793,7 +1804,7 @@ async function copyAdminCodes(){
 
 async function registerParent(email, password, displayName){
   email=String(email||'').trim().toLowerCase(); displayName=String(displayName||'家长').trim()||'家长';
-  if(!email || !password || password.length<6) throw new Error('请输入账号和至少 6 位密码');
+  if(!email || !password || password.length<8) throw new Error('请输入账号和至少 8 位密码');
   if(CLOUD_API){
     let res, data;
     try{ res=await fetch(api('/api/register'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:email,password,displayName})}); data=await res.json().catch(()=>({})); }
@@ -1802,11 +1813,7 @@ async function registerParent(email, password, displayName){
     const parent={uid:email,email,displayName:data.displayName||displayName,token:data.token,role:'parent'};
     currentParent=parent; saveParentSession(parent); cloudReady=true; cloudState='synced'; return parent;
   }
-  const accounts=localParentAccounts();
-  if(accounts[email]) throw new Error('这个账号已注册，请直接登录');
-  const parent={uid:parentUidFromEmail(email),email,displayName,role:'parent',createdAt:new Date().toISOString()};
-  accounts[email]={...parent,passwordToken:localPasswordToken(password)}; saveLocalParentAccounts(accounts);
-  currentParent=parent; saveParentSession(parent); return parent;
+  throw new Error('云端认证尚未配置，请联系管理员');
 }
 async function loginParent(email, password){
   email=String(email||'').trim().toLowerCase();
@@ -1819,15 +1826,12 @@ async function loginParent(email, password){
     const parent={uid:email,email,displayName:data.displayName||'家长',token:data.token,role:'parent'};
     currentParent=parent; saveParentSession(parent); cloudReady=true; cloudState='synced'; return parent;
   }
-  const acc=localParentAccounts()[email];
-  if(!acc || acc.passwordToken!==localPasswordToken(password)) throw new Error('账号或密码不正确');
-  const {passwordToken, ...parent}=acc;
-  currentParent=parent; saveParentSession(parent); return parent;
+  throw new Error('云端认证尚未配置，请联系管理员');
 }
 async function resetCloudPassword(email, password, recoveryCode){
   email=String(email||'').trim().toLowerCase();
-  if(!email || !password || password.length<6) throw new Error('请输入账号和至少 6 位新密码');
-  if(!recoveryCode) throw new Error('请输入家庭验证码');
+  if(!email || !password || password.length<8) throw new Error('请输入账号和至少 8 位新密码');
+  if(!recoveryCode) throw new Error('请输入管理员提供的一次性重置码');
   let res, data;
   try{
     res=await fetch(api('/api/password/reset'),{
@@ -1893,7 +1897,11 @@ async function pushChildren(parentUid){
 function mergeChildren(localList, remoteList){
   const map = new Map();
   (remoteList||[]).forEach(c=>map.set(c.id,c));
-  (localList||[]).forEach(c=>map.set(c.id,{...map.get(c.id),...c}));
+  (localList||[]).forEach(c=>{
+    const remote=map.get(c.id);
+    const localTime=Date.parse(c.updatedAt||"")||0, remoteTime=Date.parse(remote?.updatedAt||"")||0;
+    map.set(c.id,!remote||localTime>=remoteTime?{...remote,...c}:remote);
+  });
   return [...map.values()].sort((a,b)=>String(a.createdAt||"").localeCompare(String(b.createdAt||"")));
 }
 // 检测本机孩子ID与云端不匹配但名字相同的情况（多设备各自建档导致），提示合并
@@ -1915,13 +1923,16 @@ async function promptMergeOrphanChildren(localList, remoteList, parentUid){
     if(!useful) continue;
     if(!confirm(`检测到本机有孩子「${orphan.name}」的学习记录（⭐${localProg.stars||0}，已答题约${useful}次）。\n\n云端同一账号也有同名孩子档案，这是在其他设备上建的。\n\n是否将本机记录合并到云端档案，实现跨设备同步？`)) continue;
     try{
-      let cloudProg={};
-      if(cloudOn()){
-        const r=await fetch(api('/api/progress?child='+encodeURIComponent(match.id)),{headers:authHeaders(),cache:'no-store'});
-        if(r.ok){const d=await r.json();cloudProg=d.store||{};}
-      }
-      const merged=mergeStores(normalizeStore(cloudProg),localProg);
-      if(cloudOn()) await fetch(api('/api/progress'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({childId:match.id,store:merged})});
+	      let cloudProg={}, cloudRevision=0;
+	      if(cloudOn()){
+	        const r=await fetch(api('/api/progress?child='+encodeURIComponent(match.id)),{headers:authHeaders(),cache:'no-store'});
+	        if(r.ok){const d=await r.json();cloudProg=d.store||{};cloudRevision=Number(d.revision||0);}
+	      }
+	      const merged=mergeStores(normalizeStore(cloudProg),localProg);
+	      if(cloudOn()){
+	        const saved=await fetch(api('/api/progress'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({childId:match.id,store:merged,baseRevision:cloudRevision})});
+	        if(!saved.ok) throw new Error('合并后的学习记录未能保存到云端');
+	      }
       const newKey=profileSaveKey({id:match.id,parentUid});
       const existing=normalizeStore(JSON.parse(localStorage.getItem(newKey)||'{}'));
       localStorage.setItem(newKey,JSON.stringify(mergeStores(existing,merged)));
@@ -1959,6 +1970,7 @@ async function getChildren(parentUid){
   if(cloudOn()){
     try{
       const res=await fetch(api('/api/children'),{headers:authHeaders(),cache:'no-store'});
+      if(res.status===401){currentParent=null;saveParentSession(null);throw new Error('登录已过期，请重新登录');}
       if(res.ok){
         const d=await res.json();
         if(Array.isArray(d.children)){
@@ -1977,7 +1989,7 @@ async function selectChild(childId){
   const child=childrenCache.find(c=>c.id===childId) || localChildren(currentParent.uid).find(c=>c.id===childId);
   if(!child) throw new Error('孩子档案不存在');
   currentChild=child; activeProfile={id:child.id,name:child.name,grade:child.grade,avatar:child.avatar,parentUid:currentParent?.uid||'guest'};
-  localStorage.setItem(PROFILE_KEY, JSON.stringify(activeProfile)); SAVE_KEY=profileSaveKey(activeProfile); store=load();
+  localStorage.setItem(PROFILE_KEY, JSON.stringify(activeProfile)); SAVE_KEY=profileSaveKey(activeProfile); store=load(); progressRevision=0; cloudBaseStore=null;
   await syncFromCloud(); store.grade = child.grade==null? store.grade : child.grade; save({skipCloud:true});
   // 把从云端同步到的最新星星数写回孩子档案，让选择页卡片显示正确
   if(currentParent && store.stars !== child.stars) updateChildProfile(currentParent.uid, childId, {stars:store.stars, lastStudyAt:store.lastStudy||''});
@@ -1997,17 +2009,75 @@ const localStorageService={
   },
   clearGuestProgressAfterMigration(){ localStorage.setItem(`${BASE_SAVE_KEY}_guest_backup_${Date.now()}`, localStorage.getItem(`${BASE_SAVE_KEY}_guest`)||'{}'); }
 };
-function mergeStores(base, incoming){
-  base=normalizeStore(base||{}); incoming=normalizeStore(incoming||{});
-  base.stars=Math.max(base.stars,incoming.stars); base.wrong={...incoming.wrong,...base.wrong}; base.history={...incoming.history,...base.history};
-  base.qstats={...incoming.qstats,...base.qstats}; base.days={...incoming.days,...base.days}; base.answerRecords=[...(incoming.answerRecords||[]),...(base.answerRecords||[])].slice(-500);
-  base.recent=[...(incoming.recent||[]),...(base.recent||[])].slice(-30); base.tagstats={...incoming.tagstats,...base.tagstats};
-  base.subjectLevels={...(incoming.subjectLevels||{}),...(base.subjectLevels||{})};
-  base.mastery={...(incoming.mastery||{}),...(base.mastery||{})};
-  base.courseProgress={...(incoming.courseProgress||{}),...(base.courseProgress||{})};
-  base.unlockedExtensions={...(incoming.unlockedExtensions||{}),...(base.unlockedExtensions||{})};
-  base.dailyPlan={...(incoming.dailyPlan||{}),...(base.dailyPlan||{})};
-  return normalizeStore(base);
+function cloneStore(value){ return JSON.parse(JSON.stringify(value||{})); }
+function mergeCounter(localValue,remoteValue,baseValue){
+  const local=Number(localValue)||0, remote=Number(remoteValue)||0;
+  if(baseValue===undefined||baseValue===null) return Math.max(local,remote);
+  return Math.max(0,local+remote-(Number(baseValue)||0));
+}
+function mergeCounterMap(remoteMap,localMap,baseMap,fields){
+  const out={};
+  new Set([...Object.keys(remoteMap||{}),...Object.keys(localMap||{})]).forEach(key=>{
+    const r=remoteMap?.[key]||{}, l=localMap?.[key]||{}, b=baseMap?.[key];
+    const row={...r,...l};
+    fields.forEach(field=>{ row[field]=mergeCounter(l[field],r[field],b?.[field]); });
+    if(r.updatedAt&&l.updatedAt) row.updatedAt=Date.parse(r.updatedAt)>Date.parse(l.updatedAt)?r.updatedAt:l.updatedAt;
+    out[key]=row;
+  });
+  return out;
+}
+function mergeQuestionStats(remoteMap,localMap){
+  const out={};
+  new Set([...Object.keys(remoteMap||{}),...Object.keys(localMap||{})]).forEach(subject=>{
+    out[subject]={};
+    new Set([...Object.keys(remoteMap?.[subject]||{}),...Object.keys(localMap?.[subject]||{})]).forEach(key=>{
+      const r=remoteMap?.[subject]?.[key]||{}, l=localMap?.[subject]?.[key]||{};
+      const rTime=Date.parse(r.updatedAt||"")||0,lTime=Date.parse(l.updatedAt||"")||0;
+      out[subject][key]=rTime||lTime?(rTime>lTime?{...l,...r}:{...r,...l}):{
+        ...r,...l,wrongs:Math.max(Number(r.wrongs)||0,Number(l.wrongs)||0),rightStreak:Math.max(Number(r.rightStreak)||0,Number(l.rightStreak)||0),mastered:!!(r.mastered||l.mastered)
+      };
+    });
+  });
+  return out;
+}
+function mergeMastery(remoteMap,localMap){
+  const out={};
+  new Set([...Object.keys(remoteMap||{}),...Object.keys(localMap||{})]).forEach(subject=>{
+    out[subject]={};
+    new Set([...Object.keys(remoteMap?.[subject]||{}),...Object.keys(localMap?.[subject]||{})]).forEach(tag=>{
+      const r=remoteMap?.[subject]?.[tag]||{},l=localMap?.[subject]?.[tag]||{};
+      const rTime=Date.parse(r.lastPracticedAt||"")||0,lTime=Date.parse(l.lastPracticedAt||"")||0;
+      out[subject][tag]=rTime>lTime?{...l,...r}:{...r,...l};
+    });
+  });
+  return out;
+}
+function mergeStores(remote, local, commonBase){
+  remote=normalizeStore(cloneStore(remote)); local=normalizeStore(cloneStore(local)); const common=commonBase?normalizeStore(cloneStore(commonBase)):null;
+  const merged={...remote,...local};
+  merged.stars=mergeCounter(local.stars,remote.stars,common?.stars);
+  merged.history=mergeCounterMap(remote.history,local.history,common?.history,["attempts","correct"]);
+  merged.days=mergeCounterMap(remote.days,local.days,common?.days,["attempts","correct"]);
+  merged.dailyStats=mergeCounterMap(remote.dailyStats,local.dailyStats,common?.dailyStats,["total","correct","starsEarned","studyMinutes"]);
+  merged.tagstats=mergeCounterMap(remote.tagstats,local.tagstats,common?.tagstats,["attempts","correct"]);
+  merged.qstats=mergeQuestionStats(remote.qstats,local.qstats);
+  merged.mastery=mergeMastery(remote.mastery,local.mastery);
+  const records=new Map();
+  [...(remote.answerRecords||[]),...(local.answerRecords||[])].forEach(r=>records.set(r.id||[r.createdAt,r.questionId,r.userAnswer,r.isCorrect].join("|"),r));
+  merged.answerRecords=[...records.values()].sort((a,b)=>String(a.createdAt||"").localeCompare(String(b.createdAt||""))).slice(-1000);
+  const recent=new Map();
+  [...(remote.recent||[]),...(local.recent||[])].forEach(r=>recent.set(r.id||[r.ts,r.s,r.i,r.c].join("|"),r));
+  merged.recent=[...recent.values()].sort((a,b)=>(Number(a.ts)||0)-(Number(b.ts)||0)).slice(-60);
+  merged.wrong={};
+  new Set([...Object.keys(remote.wrong||{}),...Object.keys(local.wrong||{})]).forEach(subject=>{
+    merged.wrong[subject]=[...new Set([...(remote.wrong?.[subject]||[]),...(local.wrong?.[subject]||[])])].filter(i=>!merged.qstats?.[subject]?.[String(i)]?.mastered);
+  });
+  merged.subjectLevels={...(remote.subjectLevels||{}),...(local.subjectLevels||{})};
+  merged.courseProgress={...(remote.courseProgress||{}),...(local.courseProgress||{})};
+  merged.unlockedExtensions={...(remote.unlockedExtensions||{}),...(local.unlockedExtensions||{})};
+  merged.dailyPlan={...(remote.dailyPlan||{}),...(local.dailyPlan||{})};
+  merged.updatedAt=[remote.updatedAt,local.updatedAt].filter(Boolean).sort().pop()||"";
+  return normalizeStore(merged);
 }
 
 async function syncFromCloud(){
@@ -2016,22 +2086,29 @@ async function syncFromCloud(){
   try{
     const res=await fetch(api('/api/progress?child='+encodeURIComponent(currentChild.id)),{headers:authHeaders(),cache:'no-store'});
     if(res.ok){
-      const d=await res.json(); const remote=normalizeStore(d.store||{});
-      const remoteTime=remote.updatedAt?Date.parse(remote.updatedAt):0, localTime=store.updatedAt?Date.parse(store.updatedAt):0;
-      if(remoteTime>localTime){ store=remote; saveLocalOnly(); }
-      else if(localTime>remoteTime){ await syncToCloud(true); }
+      const d=await res.json(); const remote=normalizeStore(d.store||{}); progressRevision=Number(d.revision||0);
+      const localBefore=cloneStore(store), merged=mergeStores(remote,localBefore,cloudBaseStore);
+      cloudBaseStore=cloneStore(remote); store=merged; saveLocalOnly();
+      if(JSON.stringify(merged)!==JSON.stringify(remote)) await syncToCloud(true);
       cloudState='synced';
     } else if(res.status===404){ await syncToCloud(true); }
     else { cloudState='local'; }
   }catch(e){ cloudState='local'; }
 }
-async function syncToCloud(force=false){
+async function syncToCloud(force=false,attempt=0){
   if(!cloudEnabled()) return;
   if(!force && cloudState==='syncing') return;
   cloudState='syncing';
   try{
-    const res=await fetch(api('/api/progress'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({childId:currentChild.id, store})});
-    cloudState=res.ok?'synced':'local';
+    const sending=cloneStore(store);
+    const res=await fetch(api('/api/progress'),{method:'PUT',headers:authHeaders(),body:JSON.stringify({childId:currentChild.id,store:sending,baseRevision:progressRevision})});
+    const data=await res.json().catch(()=>({}));
+    if(res.status===409&&attempt<2){
+      const remote=normalizeStore(data.store||{}); store=mergeStores(remote,sending,cloudBaseStore); saveLocalOnly();
+      progressRevision=Number(data.revision||0); cloudBaseStore=cloneStore(remote); return syncToCloud(true,attempt+1);
+    }
+    if(res.ok){progressRevision=Number(data.revision||progressRevision+1);cloudBaseStore=cloneStore(sending);cloudState='synced';}
+    else cloudState='local';
   }catch(e){ cloudState='local'; }
   if(document.getElementById('home')?.classList.contains('active')) renderHome();
 }
@@ -2057,9 +2134,9 @@ function forgotPassword(){
   if(CLOUD_API){
     const email = String(document.getElementById('parentEmail')?.value || prompt('请输入已注册的家长邮箱：') || '').trim().toLowerCase();
     if(!email) return;
-    const newPwd = prompt('请输入新密码（至少 6 位）：');
-    if(!newPwd || newPwd.length < 6){ alert('密码至少需要 6 位，未重置。'); return; }
-    const code = prompt('请输入家庭验证码：');
+    const newPwd = prompt('请输入新密码（至少 8 位）：');
+    if(!newPwd || newPwd.length < 8){ alert('密码至少需要 8 位，未重置。'); return; }
+    const code = prompt('请输入管理员提供的 15 分钟一次性重置码：');
     if(!code) return;
     const err=document.getElementById('loginError');
     if(err) err.textContent='正在重置密码...';
@@ -2073,16 +2150,7 @@ function forgotPassword(){
     });
     return;
   }
-  const email = prompt('请输入已注册的家长邮箱：');
-  if(!email) return;
-  const key = String(email).trim().toLowerCase();
-  const accounts = localParentAccounts();
-  if(!accounts[key]){ alert('该邮箱尚未注册。'); return; }
-  const newPwd = prompt('请输入新密码（至少 6 位）：');
-  if(!newPwd || newPwd.length < 6){ alert('密码至少需要 6 位，未重置。'); return; }
-  accounts[key].passwordToken = localPasswordToken(newPwd);
-  saveLocalParentAccounts(accounts);
-  alert('密码已重置！请用新密码登录。');
+  alert('云端认证尚未配置，请联系管理员。');
 }
 
 async function loginParentUI(){
@@ -2103,8 +2171,18 @@ async function renderChildScreen(){
   await syncMembershipFromCloud();
   renderMemberPanel();
   renderAvatarChips();
-  const list=document.getElementById('childList');
-  list.innerHTML = childrenCache.length ? childrenCache.map(c=>`<button class="modebtn m-learn" onclick="selectChild('${c.id}')"><span class="big">${c.avatar||'🧒'}</span><span>${c.name}<small>${gradeLabel(c.grade)} · ⭐ ${c.stars||0} · 进入学习</small></span></button>`).join('') : '<div class="empty"><span class="emoji">👨‍👩‍👧</span>还没有孩子档案，先创建一个。</div>';
+  const list=document.getElementById('childList'); list.replaceChildren();
+  if(childrenCache.length){
+    childrenCache.forEach(c=>{
+      const button=document.createElement('button'); button.className='modebtn m-learn'; button.type='button';
+      const avatar=document.createElement('span'); avatar.className='big'; avatar.textContent=c.avatar||'🧒';
+      const text=document.createElement('span'); text.textContent=c.name;
+      const small=document.createElement('small'); small.textContent=`${gradeLabel(c.grade)} · ⭐ ${c.stars||0} · 进入学习`; text.appendChild(small);
+      button.append(avatar,text); button.addEventListener('click',()=>selectChild(c.id)); list.appendChild(button);
+    });
+  }else{
+    const empty=document.createElement('div'); empty.className='empty'; empty.textContent='👨‍👩‍👧 还没有孩子档案，先创建一个。'; list.appendChild(empty);
+  }
   go('childScreen');
 }
 function renderAvatarChips(){ const box=document.getElementById('avatarChips'); if(!box) return; box.innerHTML=AVATARS.map(a=>`<div class="chip${selectedAvatar===a?' sel':''}" onclick="selectedAvatar='${a}';renderAvatarChips()">${a}</div>`).join(''); }
@@ -2238,8 +2316,6 @@ function getQStat(subject, idx){
   return st;
 }
 function isMastered(subject, idx){
-  const q = DATA[subject]?.questions?.[idx];
-  if(window.XUEBA_ADAPTIVE && q) return window.XUEBA_ADAPTIVE.questionMastered(store, subject, q);
   const st = store.qstats?.[subject]?.[String(idx)];
   return !!(st && st.mastered);
 }
@@ -2251,6 +2327,7 @@ function masteredCount(subject){
 }
 function unmasteredItems(subject, lv){
   let items = DATA[subject].questions.map((q,i)=>({i,q}));
+  if(!hasPremiumAccess()) items=items.filter(x=>(Number(x.q.lv)||1)<=maxAccessibleLevel());
   if(lv && lv!=='all') items = items.filter(x=>(x.q.lv||1)===lv);
   const win = gradeWindow();                       // 按孩子年级筛掉超纲题
   if(win) items = items.filter(x=>gradeMatch(x.q, win));
@@ -2269,9 +2346,9 @@ function recordQuestionResult(subject, idx, isCorrect){
     st.wrongs++;
   }
   if(window.XUEBA_ADAPTIVE && q) {
-    const rec = window.XUEBA_ADAPTIVE.updateMastery(store, subject, q, isCorrect);
-    st.mastered = rec.masteryLevel >= 3;
+    window.XUEBA_ADAPTIVE.updateMastery(store, subject, q, isCorrect);
   }
+  st.updatedAt = new Date().toISOString();
   updateDailyPlanProgress();
   return st;
 }
@@ -2311,7 +2388,7 @@ function poolCount(lv){
   return unmasteredItems(curSubject, lv).length;
 }
 function openSetup(){
-  setupLv=getSubjectLevel(curSubject); setupCount=8; setupCustom=8;
+  setupLv=Math.min(getSubjectLevel(curSubject),maxAccessibleLevel()); setupCount=8; setupCustom=8;
   renderChips(); go('setupScreen');
 }
 function renderChips(){
@@ -2319,11 +2396,12 @@ function renderChips(){
   const lc=document.getElementById('lvChips'); lc.innerHTML='';
   LV_META.forEach(m=>{
     const n=poolCount(m.key);
+    const memberLocked=m.key!=="all"&&Number(m.key)>maxAccessibleLevel();
     const b=document.createElement('div');
-    b.className='chip'+(setupLv===m.key?' sel':'')+(n===0?' disabled':'');
-    b.style.opacity = n===0? .4 : 1;
-    b.innerHTML=`${m.label}<small>${m.sub} · ${n}题</small>`;
-    if(n>0) b.onclick=()=>{
+    b.className='chip'+(setupLv===m.key?' sel':'')+(n===0||memberLocked?' disabled':'');
+    b.style.opacity = n===0||memberLocked? .4 : 1;
+    b.innerHTML=`${m.label}<small>${memberLocked?'会员解锁':`${m.sub} · ${n}题`}</small>`;
+    if(n>0&&!memberLocked) b.onclick=()=>{
       setupLv=m.key;
       if(m.key!=='all'){ setSubjectLevel(curSubject, m.key); save({skipCloud:true}); }
       if(setupCount>n)setupCount=Math.min(8,n);
@@ -2402,16 +2480,17 @@ function renderHome(){
     const wrongN = wrongCount(key);
     const rate = subjectRate(key);
     const learnedN = masteredCount(key);
-    const div = document.createElement("div");
-    div.className="subject";
+    const div = document.createElement("button");
+    const locked=!canAccessSubject(key); div.type="button";
+    div.className="subject"+(locked?" locked":"");
     div.style.borderColor = s.color;
     div.innerHTML = `<span class="emoji">${s.emoji}</span>
       <div class="name">${s.name}</div>
       <div class="route-badge">${meta.route || s.route || "课程"}</div>
       <div class="cnt">当前 ${levelText(lvl)} · 核心进度 ${progress?.pct ?? 0}%</div>
-      <div class="cnt">${s.questions.length}题 · 已会${learnedN}${wrongN?` · 错题${wrongN}`:""}</div>
+      <div class="cnt">${s.questions.length}题 · 已会${learnedN}${wrongN?` · 错题${wrongN}`:""}${locked?" · 🔒 会员":""}</div>
       ${rate?`<div class="rate">正确率 ${rate}</div>`:"<div class=\"rate\">还没测试</div>"}`;
-    div.onclick = ()=>openSubject(key);
+    div.onclick = ()=>locked?showMembershipRequired():openSubject(key);
     grid.appendChild(div);
   });
 }
@@ -2470,17 +2549,21 @@ function renderHabitPanel(){
 let dailyActiveTaskId = null;
 function ensureDailyPlan(){
   const date=todayKey();
-  if(store.dailyPlan && store.dailyPlan.date===date && Array.isArray(store.dailyPlan.tasks)) return store.dailyPlan;
+  if(store.dailyPlan && store.dailyPlan.date===date && Array.isArray(store.dailyPlan.tasks)){
+    if(!hasPremiumAccess()) store.dailyPlan.tasks=store.dailyPlan.tasks.filter(task=>canAccessSubject(task.subject));
+    return store.dailyPlan;
+  }
   const pool=(subject)=>DATA[subject]?.questions?.length ? subject : "math";
   const focus = ["math","reading","english"][new Date().getDate()%3];
   const extension = new Date().getDate()%2 ? pool("geography") : pool("history");
-  store.dailyPlan={date,tasks:[
+  const tasks=[
     {id:"core",title:`${DATA[focus].name}核心课程`,subject:focus,count:8,done:0},
     {id:"language",title:"阅读与英语",subject:focus==="reading"?"english":"reading",count:5,done:0},
     {id:"wrong",title:"错题复习",subject:focus,count:5,done:0},
     {id:"olympiad",title:"奥数思维",subject:"olympiad",count:5,done:0},
     {id:"extension",title:"地理/历史拓展",subject:extension,count:5,done:0}
-  ], completed:false, bonusAwarded:false};
+  ].filter(task=>canAccessSubject(task.subject));
+  store.dailyPlan={date,tasks,completed:false,bonusAwarded:false};
   save({skipCloud:true});
   return store.dailyPlan;
 }
@@ -2496,6 +2579,7 @@ function startTodayLearning(){
 }
 function startDailyTask(id){
   const plan=ensureDailyPlan(), task=plan.tasks.find(x=>x.id===id); if(!task) return;
+  if(!canAccessSubject(task.subject)){showMembershipRequired();return;}
   dailyActiveTaskId=id; curSubject=task.subject;
   if(id==="wrong") startTest("wrong",{count:task.count});
   else startTest("all",{lv:"all",count:task.count});
@@ -2518,9 +2602,6 @@ function openParentGate(){
     go("parentScreen");
     return;
   }
-  const code = prompt("请输入家庭码查看游客学习情况：");
-  if(code===null) return;
-  if(code.trim()!==FAMILY_CODE){ alert("家庭码不对"); return; }
   renderParent();
   go("parentScreen");
 }
@@ -2690,6 +2771,7 @@ function openSubject(key){
 let learnCards=[];
 function visibleLearnCards(cards){
   const grade = store.grade;
+  cards=(cards||[]).filter(c=>hasPremiumAccess()||(Number(c.lv)||1)<=maxAccessibleLevel());
   if(grade==null) return cards;
   const filtered = cards.filter(c=>{
     const lv = Number(c.lv)||1;
@@ -2818,6 +2900,7 @@ function speakQuestion(){
 
 /* ============== 测试 ============== */
 function startTest(mode, cfg){
+  if(!canAccessSubject(curSubject)){showMembershipRequired();return;}
   testMode = mode;
   const s = DATA[curSubject];
   if(mode==="wrong"){
@@ -2909,6 +2992,7 @@ function choose(btn, correct, qIndex){
   recordAnswerMeta(q, correct);                 // 最近正确率 + 知识点统计
   const qStat = recordQuestionResult(curSubject, qIndex, correct);
   const answerRecord = {
+    id:(crypto.randomUUID?crypto.randomUUID():`answer_${Date.now()}_${Math.random().toString(36).slice(2)}`),
     id:`${Date.now()}_${curSubject}_${qIndex}`,
     questionId:q.id || `${curSubject}_${qIndex}`,
     questionText:q.q,
@@ -2940,8 +3024,7 @@ function choose(btn, correct, qIndex){
     // 连续答对到学会后，才从错题本移除；避免一次猜对就被清掉。
     if(qStat.mastered) removeWrong(curSubject, qIndex);
     fb.className="feedback show ok";
-    const targetStreak = 5;
-    const masteredLabel = qStat.mastered ? "这个知识点已基本掌握" : `知识点还会继续复习`;
+    const masteredLabel = qStat.mastered ? "这道题已连续答对 5 次" : `这道题还会继续复习`;
     const head = qStat.mastered
       ? `🏆 ${masteredLabel}。以后日常测试会少考同类题。`
       : pick(["🎉 答对啦！","⭐ 太棒了！","👍 完全正确！","🌟 做得很好！"]) + ` ${masteredLabel}`;
@@ -3224,7 +3307,7 @@ function shuffleQuestionOptions(question){
 function recordAnswerMeta(q, isCorrect){
   if(!q) return;
   store.recent = store.recent || [];
-  store.recent.push({c:isCorrect?1:0, s:q.subject, t:q.tags||[], ts:Date.now()});
+  const recentTs=Date.now();store.recent.push({id:`recent_${recentTs}_${Math.random().toString(36).slice(2)}`,c:isCorrect?1:0,s:q.subject,t:q.tags||[],ts:recentTs});
   if(store.recent.length>30) store.recent = store.recent.slice(-30);
   store.tagstats = store.tagstats || {};
   (q.tags||[]).forEach(tag=>{
@@ -3303,10 +3386,15 @@ function getParentReport(){
 }
 
 /* ============== 启动 ============== */
-buildAll();
-if(window.applyCurriculumEnhancements) window.applyCurriculumEnhancements(DATA);
-if(window.XUEBA_QUESTION_BANK) window.XUEBA_QUESTION_BANK.append(DATA);
-normalizeQuestionBank();   // 给全部题目补全年级/难度/知识点/解析字段
+window.XUEBA_STARTUP_ERRORS=[];
+function runStartupStep(name,fn){
+  try{fn();}catch(error){window.XUEBA_STARTUP_ERRORS.push({name,message:error?.message||String(error)});console.error(`[startup:${name}]`,error);}
+}
+runStartupStep("base-question-bank",()=>buildAll());
+runStartupStep("curriculum-enhancements",()=>{if(window.applyCurriculumEnhancements)window.applyCurriculumEnhancements(DATA);});
+runStartupStep("append-v2-question-bank",()=>{if(window.XUEBA_QUESTION_BANK)window.XUEBA_QUESTION_BANK.append(DATA);});
+runStartupStep("normalize-question-bank",()=>normalizeQuestionBank());
+window.XUEBA_RUNTIME_STATUS={ready:window.XUEBA_STARTUP_ERRORS.length===0,errors:window.XUEBA_STARTUP_ERRORS,counts:Object.fromEntries(Object.entries(DATA).map(([key,value])=>[key,value.questions?.length||0]))};
 function initApp(){
   if(new URLSearchParams(location.search).get("admin")==="1"){
     go("adminScreen");

@@ -17,6 +17,7 @@
 - `GET /api/admin/dashboard`
 - `GET /api/admin/users`
 - `POST /api/admin/users/:id`
+- `POST /api/admin/password-reset/:username`
 - `GET/POST /api/admin/redeem-codes`
 - `POST /api/admin/redeem-codes/revoke`
 - `GET /api/admin/orders`
@@ -24,13 +25,11 @@
 - `GET /api/admin/plans`
 - `GET /api/admin/logs`
 
-## 兑换码
+## 兑换码和密码重置
 
-- 月卡：`YUEKA2026`、`XUEBA-MONTH-2026`
-- 季卡：`JIKA2026`、`XUEBA-QUARTER-2026`
-- 年卡：`NIANKA2026`、`XUEBA-YEAR-2026`
+兑换码只能由运营后台动态生成，网站和源码不内置公开兑换码。同一个兑换码全局只能使用一次，多张不同兑换码会按当前有效期继续叠加。
 
-同一个家长账号下，同一个兑换码只能兑换一次。多张不同兑换码会按当前有效期继续叠加。
+密码重置码只能由管理员在用户管理页生成，有效期 15 分钟且只能使用一次。不要设置公开或长期通用的重置码。
 
 ## 环境变量
 
@@ -40,7 +39,7 @@
 - `TOKEN_SECRET`：JWT/HMAC token 密钥，必须设置为足够长的随机字符串
 - `ADMIN_JWT_SECRET`：管理员会话密钥，必须与用户会话密钥分开
 - `ADMIN_USERS_JSON`：管理员账号数组，使用 `node scripts/create-admin-credential.js` 生成单个账号后再放入 JSON 数组
-- `REDEEM_CODES_JSON`：可选，用 JSON 覆盖默认兑换码表
+- `REDEEM_CODES_JSON`：仅用于迁移旧兑换码；新兑换码统一从运营后台生成
 
 ## 本地测试
 

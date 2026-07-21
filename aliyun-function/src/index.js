@@ -78,6 +78,10 @@ function ossStorage() {
   };
 }
 
+if(!process.env.TOKEN_SECRET || process.env.TOKEN_SECRET.length < 32) {
+  throw new Error("TOKEN_SECRET must be configured with at least 32 characters");
+}
+
 const app = createApp({
   storage: ossStorage(),
   tokenSecret: process.env.TOKEN_SECRET
@@ -91,6 +95,13 @@ const MIME_TYPES = {
   ".json": "application/json; charset=utf-8",
   ".svg": "image/svg+xml; charset=utf-8",
   ".txt": "text/plain; charset=utf-8"
+};
+const STATIC_SECURITY_HEADERS = {
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://xueba-backend-uqcgxocmtf.cn-hangzhou.fcapp.run; img-src 'self' data:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 };
 
 function safePublicPath(urlPath) {
@@ -112,8 +123,9 @@ async function staticResponse(urlPath) {
     return {
       statusCode: 200,
       headers: {
+        ...STATIC_SECURITY_HEADERS,
         "Content-Type": MIME_TYPES[ext] || "application/octet-stream",
-        "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=300"
+        "Cache-Control": ext === ".html" ? "no-store" : "public, max-age=14400"
       },
       body
     };
@@ -124,7 +136,7 @@ async function staticResponse(urlPath) {
         const body = await fs.promises.readFile(path.join(PUBLIC_DIR, "index.html"), "utf8");
         return {
           statusCode: 200,
-          headers: {"Content-Type": MIME_TYPES[".html"], "Cache-Control": "no-store"},
+          headers: {...STATIC_SECURITY_HEADERS, "Content-Type": MIME_TYPES[".html"], "Cache-Control": "no-store"},
           body
         };
       } catch(inner) {
