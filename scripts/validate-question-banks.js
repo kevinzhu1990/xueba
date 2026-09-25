@@ -57,4 +57,5 @@ if(!banks.geography || !["北京","石家庄","太原","沈阳","长春","哈尔
 optionPatterns.forEach((count,key)=>{if(count>10)warnings.push(`选项组合重复 ${count} 次：${key.slice(0,80)}`);});
 warnings.forEach(e=>console.warn(`警告: ${e}`));
 if(errors.length){console.error(`校验失败，共 ${errors.length} 项`);errors.slice(0,50).forEach(e=>console.error(`- ${e}`));process.exit(1);}
-console.log("题库校验通过：字段、答案、数学条件、英语语义、阅读原文、质量标记和题量均符合要求。");
+require('./validate-learning-content');
+console.log("题库校验通过：结构与学习内容检查均符合要求。");

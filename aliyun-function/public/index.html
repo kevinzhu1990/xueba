@@ -373,23 +373,23 @@
 </div>
 
 <script src="adaptive-engine.js?v=course-20260713"></script>
-<script src="data/questions/question-bank-loader.js?v=question-bank-20260713"></script>
-<script src="data/questions/math-extra-v2.js?v=question-bank-20260713"></script>
-<script src="data/questions/olympiad-extra-v2.js?v=question-bank-20260713"></script>
-<script src="data/questions/reading.js?v=question-bank-20260713"></script>
-<script src="data/questions/english.js?v=question-bank-20260713"></script>
-<script src="data/questions/physics.js?v=question-bank-20260713"></script>
-<script src="data/questions/chemistry.js?v=question-bank-20260713"></script>
-<script src="data/questions/biology.js?v=question-bank-20260713"></script>
-<script src="data/questions/comprehensive-extra-v2.js?v=question-bank-20260713"></script>
-<script src="data/questions/history-extra-v2.js?v=question-bank-20260713"></script>
-<script src="data/questions/geography-extra-v2.js?v=question-bank-20260713"></script>
-<script src="data/questions/idiom.js?v=question-bank-20260713"></script>
+<script src="data/questions/question-bank-loader.js?v=question-bank-20260925"></script>
+<script src="data/questions/math-extra-v2.js?v=question-bank-20260925"></script>
+<script src="data/questions/olympiad-extra-v2.js?v=question-bank-20260925"></script>
+<script src="data/questions/reading.js?v=question-bank-20260925"></script>
+<script src="data/questions/english.js?v=question-bank-20260925"></script>
+<script src="data/questions/physics.js?v=question-bank-20260925"></script>
+<script src="data/questions/chemistry.js?v=question-bank-20260925"></script>
+<script src="data/questions/biology.js?v=question-bank-20260925"></script>
+<script src="data/questions/comprehensive-extra-v2.js?v=question-bank-20260925"></script>
+<script src="data/questions/history-extra-v2.js?v=question-bank-20260925"></script>
+<script src="data/questions/geography-extra-v2.js?v=question-bank-20260925"></script>
+<script src="data/questions/idiom.js?v=question-bank-20260925"></script>
 <script src="data/curriculum/math-curriculum.js?v=curriculum-20260717"></script>
 <script src="data/curriculum/reading-curriculum.js?v=curriculum-20260717"></script>
 <script src="data/curriculum/english-curriculum.js?v=curriculum-20260717"></script>
 <script src="data/curriculum/science-curriculum.js?v=curriculum-20260717"></script>
-<script src="data/curriculum-enhancements.js?v=course-20260712"></script>
+<script src="data/curriculum-enhancements.js?v=course-20260925"></script>
 <script>
 /* ============== 题库数据 ============== */
 const DATA = {
@@ -461,7 +461,7 @@ const DATA = {
     name:"地理", emoji:"🌍", desc:"认识我们的世界", color:"#3ec46d",
     cards:[
       {word:"中国的首都", say:"北京", mean:"🏯 北京是中国的首都，有天安门和长城。"},
-      {word:"地球", say:"我们的家", mean:"🌍 我们住在地球上，地球是圆圆的。"},
+      {word:"地球", say:"我们的家", mean:"🌍 我们住在地球上，地球的整体形状接近球体。"},
       {word:"七大洲", say:"亚洲最大", mean:"🗺️ 地球上有七个大洲，我们中国在亚洲。"},
       {word:"海洋", say:"蓝色的水", mean:"🌊 地球上大部分是海洋，海水是咸的。"},
       {word:"长江黄河", say:"中国的大河", mean:"🏞️ 长江是中国最长的河，黄河是第二长。"},
@@ -474,7 +474,7 @@ const DATA = {
       {q:"中国最长的河是？", o:["黄河","长江","珠江","淮河"], a:1},
       {q:"海水是什么味道？", o:["甜的","咸的","酸的","辣的"], a:1},
       {q:"一年有几个季节？", o:["2个","3个","4个","5个"], a:2},
-      {q:"地球是什么形状？", o:["方形","圆形","三角形","长条形"], a:1},
+      {q:"地球的整体形状接近什么？", o:["正方体","球体","三角形","长条形"], a:1},
       {q:"哪个建筑在北京？", o:["东方明珠","长城","兵马俑","西湖"], a:1},
     ]
   },
@@ -1156,7 +1156,7 @@ const CHEM_EXTRA=[
   {q:"铅笔芯能在纸上写出字，是因为它含有较软的？",a:"石墨",w:["铁","盐","玻璃"],lv:3},
   {q:"汽水开盖后慢慢变「没气」，是因为二氧化碳？",a:"跑掉了",w:["变多了","变成水","结冰了"],lv:2},
   {q:"洗手液、肥皂能把手上的油污洗掉，主要靠它的？",a:"去污能力",w:["香味","颜色","泡泡"],lv:2},
-  {q:"水在0度结冰、100度沸腾，这两个温度叫水的？",a:"冰点和沸点",w:["甜点和咸点","早点和晚点","起点和终点"],lv:3},
+  {q:"标准大气压下，纯水约在0℃结冰、100℃沸腾。这两个温度分别叫水的什么？",a:"凝固点和沸点",w:["熔点和露点","着火点和沸点","温差和室温"],lv:3},
   {q:"把一勺糖放进热水比放进冷水溶解得？",a:"更快",w:["更慢","一样","不溶解"],lv:3},
   {q:"把沙子和铁屑混在一起，可以先用什么把铁屑分出来？",a:"磁铁",w:["筷子","糖水","手电筒"],lv:2},
   {q:"把盐水变回食盐，可以让水慢慢？",a:"蒸发",w:["结成铁","发光","变甜"],lv:3},
@@ -1194,7 +1194,7 @@ const CHEM_HARD=[
   {q:"在水里加入小苏打和白醋会产生大量？",a:"气泡(二氧化碳)",w:["火焰","盐","糖"],lv:3},
   {q:"二氧化碳通入澄清石灰水，石灰水会？",a:"变浑浊",w:["变红","变甜","结冰"],lv:3},
   {q:"水在标准大气压下沸腾的温度是？",a:"100摄氏度",w:["0摄氏度","50摄氏度","37摄氏度"],lv:3},
-  {q:"水在标准大气压下结冰的温度是？",a:"0摄氏度",w:["100摄氏度","10摄氏度","37摄氏度"],lv:3},
+  {q:"在标准大气压下，纯水的凝固点约是多少？",a:"0摄氏度",w:["100摄氏度","10摄氏度","37摄氏度"],lv:3},
   {q:"食盐的主要成分是氯化钠，它由钠和什么组成？",a:"氯",w:["氧","碳","铁"],lv:3},
   {q:"柠檬、白醋尝起来酸，它们属于？",a:"酸性",w:["碱性","中性","金属"],lv:3},
   {q:"肥皂水、小苏打水一般属于？",a:"碱性",w:["酸性","中性","气体"],lv:3},

@@ -7,7 +7,7 @@
     ([era,key,answer])=>`${era}中，下面哪项与“${key}”对应？`,
     ([era,key,answer])=>`历史资料卡“${key}”的正确内容是？`,
     ([era,key,answer])=>`复习${era}时，关于“${key}”应选择哪条笔记？`,
-    ([era,key,answer])=>`如果按时间线整理，${era}的“${key}”应如何理解？`
+    ([era,key,answer])=>`概括${era}中“${key}”的作用或贡献，哪项正确？`
   ];
   facts.forEach((row,i)=>forms.forEach((make,j)=>{const [era,key,answer,d1,d2,d3]=row;out.push(B.make("history","v2-history-"+(i+1)+"-"+(j+1),4,era,key,j===3?4:2,"single",make(row),[answer,d1,d2,d3],answer,`这是${era}中关于${key}的历史知识。学习时要同时记住人物、事件、时间线和影响。`,{courseType:"extension",quality:{templateGroup:"history-knowledge-"+i,reviewedBy:"script-reviewed"}}));}));
   B.register("history",out);
