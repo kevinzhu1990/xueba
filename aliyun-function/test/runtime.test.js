@@ -21,6 +21,7 @@ test("curriculum and all appended question banks initialize without an exception
     "data/questions/history-extra-v2.js",
     "data/questions/geography-extra-v2.js",
     "data/questions/idiom.js",
+    "data/cantonese.js",
     "data/curriculum/math-curriculum.js",
     "data/curriculum/reading-curriculum.js",
     "data/curriculum/english-curriculum.js",
@@ -31,10 +32,13 @@ test("curriculum and all appended question banks initialize without an exception
     vm.runInContext(fs.readFileSync(path.join(root, file), "utf8"), context, {filename:file});
   }
 
-  const subjects = ["math","olympiad","reading","english","physics","chemistry","biology","comprehensive","history","geography","idiom"];
+  const subjects = ["math","olympiad","reading","english","cantonese","physics","chemistry","biology","comprehensive","history","geography","idiom"];
   const data = Object.fromEntries(subjects.map(subject => [subject, {questions:[], cards:[]}])) ;
+  data.cantonese=context.window.XUEBA_CANTONESE.buildSubject();
   assert.doesNotThrow(() => context.window.applyCurriculumEnhancements(data));
   assert.doesNotThrow(() => context.window.XUEBA_QUESTION_BANK.append(data));
   assert.ok(context.window.XUEBA_CURRICULUM.COURSE_MAP.length > 100);
   for(const subject of subjects) assert.ok(data[subject].questions.length >= 100, `${subject} question count`);
+  assert.equal(data.cantonese.cards.length,40,'粤语不插入通用课程说明卡');
+  assert.ok(context.window.XUEBA_CURRICULUM.SUBJECT_ORDER.includes('cantonese'));
 });

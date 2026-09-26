@@ -382,7 +382,7 @@
 
 </div>
 
-<script src="adaptive-engine.js?v=course-20260713"></script>
+<script src="adaptive-engine.js?v=cantonese-20260926"></script>
 <script src="data/questions/question-bank-loader.js?v=question-bank-20260925"></script>
 <script src="data/questions/math-extra-v2.js?v=question-bank-20260925"></script>
 <script src="data/questions/olympiad-extra-v2.js?v=question-bank-20260925"></script>
@@ -399,7 +399,8 @@
 <script src="data/curriculum/reading-curriculum.js?v=curriculum-20260717"></script>
 <script src="data/curriculum/english-curriculum.js?v=curriculum-20260717"></script>
 <script src="data/curriculum/science-curriculum.js?v=curriculum-20260717"></script>
-<script src="data/curriculum-enhancements.js?v=course-20260925"></script>
+<script src="data/curriculum-enhancements.js?v=cantonese-20260926"></script>
+<script src="data/cantonese.js?v=cantonese-20260926"></script>
 <script>
 /* ============== 题库数据 ============== */
 const DATA = {
@@ -1428,6 +1429,7 @@ function buildAll(){
   genMath(); genEnglish(); genIdiom(); genGeo();
   genBio(); genChem(); genPhys(); genReading();
   genCards();
+  if(window.XUEBA_CANTONESE) DATA.cantonese=window.XUEBA_CANTONESE.buildSubject();
 }
 
 /* ====== 学习卡片：从题库数据自动生成，做到「考什么就能学什么」 ======
@@ -1689,7 +1691,7 @@ function activeMembership(){
   const m = currentMembership();
   return m && (m.plan === "lifetime" || Date.parse(m.expiresAt) > Date.now()) ? m : null;
 }
-const FREE_SUBJECTS = new Set(["math","reading","english","idiom"]);
+const FREE_SUBJECTS = new Set(["math","reading","english","idiom","cantonese"]);
 function hasPremiumAccess(){ return !!activeMembership(); }
 function canAccessSubject(subject){ return hasPremiumAccess() || FREE_SUBJECTS.has(subject); }
 function maxAccessibleLevel(){ return hasPremiumAccess() ? 5 : 2; }
@@ -2410,7 +2412,7 @@ function poolCount(lv){
   return unmasteredItems(curSubject, lv).length;
 }
 function openSetup(){
-  setupLv=Math.min(getSubjectLevel(curSubject),maxAccessibleLevel()); setupCount=8; setupCustom=8;
+  setupLv=curSubject==="cantonese" ? "all" : Math.min(getSubjectLevel(curSubject),maxAccessibleLevel()); setupCount=8; setupCustom=8;
   renderChips(); go('setupScreen');
 }
 function renderChips(){
@@ -2862,7 +2864,9 @@ function renderLearn(){
   const total=learnReviewPhase ? learnReviewCards.length : learnDeck.length;
   document.getElementById("learnCount").textContent=learnReviewPhase ? `🔁 再练 ${count} / ${total} 张` : `第 ${count} / ${total} 张 · 想一想再揭晓`;
   document.getElementById("learnBar").style.width=((Math.min(learnIdx+1,learnDeck.length)/learnDeck.length)*100)+"%";
-  const speakBtn=`<button class="speakbtn" onclick="speakCard()">🔊 ${learnRevealed ? "再听一遍" : "听一听"}</button>`;
+  const speakBtn=curSubject==="cantonese"
+    ? (hkVoice ? `<button class="speakbtn" onclick="speakCard()">🔊 听粤语</button>` : `<div class="fc-detail">🔇 此设备暂无粤语语音，${learnRevealed ? "可看粤拼跟家人一起读。" : "先猜意思，揭晓后再看粤拼。"}</div>`)
+    : `<button class="speakbtn" onclick="speakCard()">🔊 ${learnRevealed ? "再听一遍" : "听一听"}</button>`;
   let html;
   if(c.front!==undefined){
     const lvTag=c.lv ? levelText(c.lv) : "";
@@ -2907,11 +2911,13 @@ function advanceLearnCard(){
 
 // 朗读：中文用 zh-CN，英文单词用 en-US
 // 选出设备上最地道的美式英语语音 / 中文语音
-let usVoice=null, zhVoice=null;
+let usVoice=null, zhVoice=null, hkVoice=null;
 function pickVoices(){
   if(!('speechSynthesis' in window)) return;
   const vs = speechSynthesis.getVoices();
   if(!vs.length) return;
+  const oldHkVoice=hkVoice;
+  hkVoice=vs.find(v=>/^(zh[-_]HK|yue[-_]HK)$/i.test(v.lang)) || null;
   const isUS = v => /en[-_]US/i.test(v.lang);
   // 优先挑公认音质好的美式嗓音
   const preferUS = ["Google US English","Samantha","Ava","Allison","Susan","Alex",
@@ -2926,6 +2932,7 @@ function pickVoices(){
          || vs.find(v=>/zh[-_](CN|Hans)/i.test(v.lang))
          || vs.find(v=>/^zh/i.test(v.lang))
          || null;
+  if(oldHkVoice!==hkVoice&&curSubject==="cantonese"&&document.getElementById("learnScreen").classList.contains("active")) renderLearn();
 }
 if('speechSynthesis' in window){
   pickVoices();
@@ -2934,9 +2941,12 @@ if('speechSynthesis' in window){
 function speak(txt, lang){
   if(!store.sound) return;                 // 声音总开关关闭时不朗读
   if(!('speechSynthesis' in window)) return;
-  if(!usVoice && !zhVoice) pickVoices();
+  if(!usVoice && !zhVoice && !hkVoice) pickVoices();
   const u = new SpeechSynthesisUtterance(txt);
-  if(lang==="en-US"){
+  if(lang==="zh-HK"){
+    if(!hkVoice) return;                     // 没有粤语语音时不能用普通话冒充
+    u.voice=hkVoice; u.lang=hkVoice.lang; u.rate=.85;
+  } else if(lang==="en-US"){
     u.lang = "en-US";
     if(usVoice){ u.voice = usVoice; u.lang = usVoice.lang; }  // 强制使用美式嗓音
     u.rate = .8;
@@ -2951,7 +2961,9 @@ function speak(txt, lang){
 // 朗读当前学习卡片
 function speakCard(){
   const c = learnCards[learnIdx]; if(!c) return;
-  if(c.front!==undefined){
+  if(curSubject==="cantonese"){
+    speak(c.cantonese,"zh-HK");
+  } else if(c.front!==undefined){
     if(curSubject==="reading"&&learnRevealed) speak(c.back, "zh-CN");
     else speak(c.front+(learnRevealed ? "。"+c.back : ""), "zh-CN");
   } else if(curSubject==="english" && /^[a-zA-Z]/.test(c.word)){
@@ -2964,6 +2976,10 @@ function speakCard(){
 function speakQuestion(){
   const it = testQueue[testIdx]; if(!it) return;
   const q = it.q;
+  if(curSubject==="cantonese"){
+    if(q.audioText) speak(q.audioText,"zh-HK");
+    return;
+  }
   const txt = (curSubject==="reading" && q.text)? q.text : q.q;
   speak(txt, "zh-CN");
 }
@@ -3035,8 +3051,11 @@ function renderQuestion(){
   document.getElementById("qText").textContent = q.q;
   const hint = document.getElementById("qHint");
   let hintHtml = q.text? `<span class="read-text">${q.text}</span>` : "";
-  // 所有题目都加「听一听」按钮（英语单词题用英文读，其他用中文读）
-  hintHtml += `<button class="speakbtn" onclick="speakQuestion()">🔊 听一听</button>`;
+  if(curSubject==="cantonese"){
+    if(q.audioText) hintHtml += hkVoice
+      ? `<button class="speakbtn" onclick="speakQuestion()">🔊 听粤语</button>`
+      : `<span class="qhint">🔇 此设备暂无粤语语音，请按文字作答。</span>`;
+  } else hintHtml += `<button class="speakbtn" onclick="speakQuestion()">🔊 听一听</button>`;
   hint.innerHTML = hintHtml;
 
   // 选项乱序：用通用函数打乱，正确答案索引同步更新（不影响错题记录）
@@ -3259,6 +3278,7 @@ function gradeLabel(g){ const x=GRADES.find(z=>z.g===g); return x? x.label : "�
 
 // lv→年级基准区间（再按学科/内容微调）
 function baseGradeBand(subject, lv){
+  if(subject==="cantonese") return [0,6]; // 生活口语不按学校年级排除
   if(lv>=5) return [5,6];
   if(lv===4) return [4,5];
   if(lv===3) return [3,4];
@@ -3342,7 +3362,7 @@ function normalizeQuestionBank(){
       const existingTags = Array.isArray(q.tags) ? q.tags.filter(Boolean) : [];
       q.tags      = (!existingTags.length || existingTags[0]==="综合练习" || existingTags[0]==="知识点") ? inferTags(subject, q.q) : existingTags;
       q.tag       = (!q.tag || q.tag==="综合练习" || q.tag==="知识点") ? q.tags[0] : q.tag;
-      q.explain   = EXPLAIN_OVERRIDES[q.q] || buildExplain(subject, q);
+      q.explain   = EXPLAIN_OVERRIDES[q.q] || q.explain || buildExplain(subject, q);
       q.type      = "single-choice";
       q.source    = "自建题库";
       q.__norm    = true;

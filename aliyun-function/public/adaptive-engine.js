@@ -4,6 +4,7 @@
     olympiad: 2,
     reading: 3,
     english: 2,
+    cantonese: 1,
     physics: 2,
     chemistry: 2,
     biology: 2,

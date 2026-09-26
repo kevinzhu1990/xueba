@@ -1,9 +1,10 @@
 (function(){
-  const SUBJECT_ORDER = ["math","reading","english","chemistry","physics","biology","comprehensive","olympiad","geography","history","idiom"];
+  const SUBJECT_ORDER = ["math","reading","english","cantonese","chemistry","physics","biology","comprehensive","olympiad","geography","history","idiom"];
   const SUBJECT_META = {
     math:{name:"数学", emoji:"🧮", desc:"校内主线：四年级核心 + 五年级衔接", color:"#7b8cff", route:"校内课程", defaultLevel:4},
     reading:{name:"阅读", emoji:"📚", desc:"校内主线：字词、句子、段落和阅读理解", color:"#a06bff", route:"校内课程", defaultLevel:3},
     english:{name:"英语", emoji:"🔤", desc:"校内主线：自然拼读、词汇、句型和短文", color:"#4a90e2", route:"校内课程", defaultLevel:2},
+    cantonese:{name:"粤语启蒙", emoji:"🎤", desc:"日常口语：问候、家人、吃喝、校园和心情", color:"#ee7b9b", route:"语言启蒙", defaultLevel:1},
     chemistry:{name:"化学启蒙", emoji:"🧪", desc:"小学科学：物质、水、空气、溶解和安全实验", color:"#ffcc4d", route:"校内课程", defaultLevel:2},
     physics:{name:"物理启蒙", emoji:"🧲", desc:"小学科学：力、光、声、热、电和磁", color:"#ff6b6b", route:"校内课程", defaultLevel:2},
     biology:{name:"生物", emoji:"🐢", desc:"小学科学：动物、植物、人体和生态", color:"#56ccf2", route:"校内课程", defaultLevel:2},
@@ -275,6 +276,7 @@
 
   function buildCards(DATA) {
     Object.keys(SUBJECT_META).forEach(subject=>{
+      if(subject==="cantonese") return; // 粤语直接从短句开始，不插入通用课程说明卡
       ensureSubject(DATA, subject);
       const meta = SUBJECT_META[subject];
       DATA[subject].cards.unshift({
