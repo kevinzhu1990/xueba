@@ -153,12 +153,20 @@
   .empty .emoji{ font-size:64px; display:block; margin-bottom:10px; }
 
   .flashcard{ text-align:center; }
+  .learn-count{font-size:15px; font-weight:800; color:#617181; margin:-6px 0 12px; text-align:center;}
+  .flashcard .fc-prompt{font-size:16px; font-weight:750; color:#617181; margin:8px 0 12px;}
+  .flashcard .fc-emoji{font-size:58px; line-height:1.2; margin:4px 0;}
   .flashcard .fc-word{ font-size:40px; font-weight:900; margin:10px 0; }
   .flashcard .fc-sub{ font-size:20px; color:#4a90e2; font-weight:700; margin-bottom:14px;}
   .flashcard .fc-mean{ font-size:20px; line-height:1.6; background:#f3f8fc; border-radius:16px; padding:18px; }
   .flashcard .fc-q{ font-size:22px; font-weight:800; line-height:1.5; margin:6px 0 16px; }
   .flashcard .fc-a{ font-size:22px; font-weight:800; line-height:1.6; background:#e3f9ec; color:#1c8f48;
     border-radius:16px; padding:18px; }
+  .flashcard .fc-detail{font-size:17px; line-height:1.55; background:#f3f8fc; border-radius:14px;
+    padding:12px 14px; margin-top:10px; text-align:left; user-select:text;}
+  .flashcard .fc-detail b{color:#4a90e2;}
+  .learn-review{width:100%; margin-top:10px; border:2px solid #ffbb56; background:#fff6e8;
+    border-radius:18px; padding:15px; color:#995b00; font-size:17px; font-weight:800; cursor:pointer; display:none;}
   .speakbtn{ background:#fff3d6; border:none; border-radius:16px; padding:10px 18px; font-size:16px;
     font-weight:700; cursor:pointer; margin-top:14px; color:#b07d00;}
   .footer-note{ text-align:center; color:#9aa7b4; font-size:12px; margin-top:24px; line-height:1.6;}
@@ -331,8 +339,10 @@
   <div id="learnScreen" class="screen">
     <button class="backbtn" onclick="learnBack()">← 返回</button>
     <div class="progress"><i id="learnBar"></i></div>
+    <div class="learn-count" id="learnCount" aria-live="polite"></div>
     <div class="card flashcard" id="learnCard"></div>
-    <button class="nextbtn show" id="learnNext" style="background:linear-gradient(135deg,#4a90e2,#56ccf2)">下一张 →</button>
+    <button class="nextbtn show" id="learnNext" style="background:linear-gradient(135deg,#4a90e2,#56ccf2)">想好了，看答案</button>
+    <button class="learn-review" id="learnReview">🔁 再练一次</button>
   </div>
 
   <!-- 测试 -->
@@ -1440,22 +1450,34 @@ function factCard(it, tag){
 }
 function wordCard(word, say, mean){ return {word, say, mean}; }
 function englishWordCard(en, zh, emo, cat){
-  let tip = `记忆：先看图，再听读音，最后遮住中文说出 ${en}。`;
-  let sentence = `例句：I know this word: ${en}.`;
-  if(["动物","玩具运动"].includes(cat)) sentence = `例句：I see a ${en}.`;
-  if(cat==="水果") sentence = `例句：I like ${en}s.`;
-  if(cat==="食物") {
-    const massFood = ["rice","bread","milk","water","meat","juice"];
-    const article = /^[aeiou]/i.test(en) ? "an" : "a";
-    sentence = massFood.includes(en) ? `例句：I like ${en}.` : `例句：I want ${article} ${en}.`;
+  const article = /^[aeiou]/i.test(en) ? "an" : "a";
+  const plural = /[^aeiou]y$/i.test(en) ? en.slice(0,-1)+"ies" : /(s|sh|ch|x)$/i.test(en) ? en+"es" : en+"s";
+  let sentence;
+  if(cat==="动物" || cat==="交通") sentence=`I see ${article} ${en}.`;
+  else if(cat==="水果") sentence=`I like ${plural}.`;
+  else if(cat==="食物") sentence=`I like ${["rice","bread","milk","water","meat","juice","candy"].includes(en) ? en : plural}.`;
+  else if(cat==="颜色" || cat==="形容词") sentence=`It is ${en}.`;
+  else if(cat==="家人" || cat==="身体" || cat==="学习") sentence=`This is my ${en}.`;
+  else if(cat==="动作") sentence=`I can ${en}.`;
+  else if(cat==="数字") sentence=`I can count to ${en}.`;
+  else if(cat==="情绪") sentence=`I feel ${en}.`;
+  else if(cat==="自然") sentence=en==="wind" ? "I feel the wind." : `Look at the ${en}.`;
+  else if(cat==="天气") sentence=`It is ${en} today.`;
+  else if(cat==="形状") sentence=`I can draw ${article} ${en}.`;
+  else if(cat==="衣物") sentence=`I have ${["shoes","socks"].includes(en) ? en : `${article} ${en}`}.`;
+  else if(cat==="玩具运动") sentence=["swim","run","dance"].includes(en) ? `I can ${en}.` : `I have ${article} ${en}.`;
+  else if(cat==="地点") sentence=en==="home" ? "Let's go home." : `Let's go to the ${en}.`;
+  else if(cat==="时间") {
+    if(["morning","afternoon","evening","night"].includes(en)) sentence=`Good ${en}!`;
+    else if(en==="yesterday") sentence="I saw you yesterday.";
+    else if(["today","tomorrow"].includes(en)) sentence=`See you ${en}.`;
+    else sentence=`One ${en} has many days.`;
   }
-  if(cat==="颜色") sentence = `例句：It is ${en}.`;
-  if(cat==="家人") sentence = `例句：This is my ${en}.`;
-  if(cat==="动作") sentence = `例句：I can ${en}.`;
-  if(cat==="数字") sentence = `例句：I can count to ${en}.`;
-  if(cat==="情绪") sentence = `例句：I feel ${en}.`;
-  if(["形容词"].includes(cat)) sentence = `例句：It is ${en}.`;
-  return wordCard(en, cat, `${emo} ${zh}\n${sentence}\n${tip}`);
+  else if(cat==="房间家具") sentence=`Look at the ${en}.`;
+  else if(cat==="课堂指令") sentence=({listen:"Please listen to me.",look:"Please look at me.",open:"Please open the book.",close:"Please close the book.",answer:"Please answer the question.",ask:"Please ask a question.",draw:"Please draw a star.",count:"Please count to ten.",spell:"Please spell your name.",learn:"Let's learn together."})[en];
+  else if(cat==="职业") sentence=en==="police" ? "The police are here." : `My friend is ${article} ${en}.`;
+  else sentence=`Here is ${article} ${en}.`;
+  return {...wordCard(en, cat, `${emo} ${zh}\n例句：${sentence}\n小挑战：遮住中文，自己说一遍。`), emoji:emo};
 }
 function idiomStudyCard(id, mean){
   return wordCard(id, "成语好词", `意思：${mean}\n用法：先想一个生活场景，再试着用这个成语说一句话。\n提醒：不要只背字面，要说得出什么时候能用。`);
@@ -2768,7 +2790,9 @@ function openSubject(key){
 }
 
 /* ============== 学习卡片 ============== */
-let learnCards=[];
+const LEARN_BATCH_SIZE=6;
+let learnCards=[], learnDeck=[], learnReviewCards=[];
+let learnReviewPhase=false, learnRevealed=false, learnCursorKey="", learnStart=0, learnAvailable=0;
 function visibleLearnCards(cards){
   const grade = store.grade;
   cards=(cards||[]).filter(c=>hasPremiumAccess()||(Number(c.lv)||1)<=maxAccessibleLevel());
@@ -2783,8 +2807,7 @@ function visibleLearnCards(cards){
 }
 function startLearn(){
   if(curSubject==="english"){ renderEnCats(); go("enCatScreen"); return; }
-  learnCards = visibleLearnCards(DATA[curSubject].cards);
-  learnIdx=0; go("learnScreen"); renderLearn();
+  beginLearnSession(DATA[curSubject].cards, "all");
 }
 const EN_CAT_EMO={动物:"🐶",水果:"🍎",颜色:"🎨",身体:"👀",家人:"👨‍👩‍👧",食物:"🍚",自然:"🌳",学习:"📖",动作:"🏃",交通:"🚗",天气:"☀️",形状:"⭐",衣物:"👕",玩具运动:"⚽",地点:"🏠",数字:"🔢",时间:"🗓️",房间家具:"🏠",课堂指令:"🙋",情绪:"😊",形容词:"📏",职业:"👩‍🏫"};
 function renderEnCats(){
@@ -2799,41 +2822,88 @@ function renderEnCats(){
   }
 }
 function learnEn(cat){
-  learnCards = visibleLearnCards((cat==="all")? DATA.english.cards : DATA.english.cards.filter(c=>c.say===cat));
-  learnIdx=0; go("learnScreen"); renderLearn();
+  beginLearnSession((cat==="all")? DATA.english.cards : DATA.english.cards.filter(c=>c.say===cat), cat);
 }
 function learnBack(){ go(curSubject==="english"? "enCatScreen":"modeScreen"); }
 
+function beginLearnSession(cards, scope){
+  const available=visibleLearnCards(cards);
+  learnCursorKey=`xueba_learn_cursor_${activeProfile?.id||"guest"}_${curSubject}_${scope}`;
+  let cursor=0;
+  try{cursor=Number(localStorage.getItem(learnCursorKey))||0;}catch(e){}
+  learnAvailable=available.length;
+  learnStart=learnAvailable ? ((Math.floor(cursor)%learnAvailable)+learnAvailable)%learnAvailable : 0;
+  learnDeck=Array.from({length:Math.min(LEARN_BATCH_SIZE,learnAvailable)},(_,i)=>available[(learnStart+i)%learnAvailable]);
+  learnCards=[...learnDeck]; learnReviewCards=[]; learnReviewPhase=false; learnRevealed=false; learnIdx=0;
+  go("learnScreen"); renderLearn();
+}
+function learnText(text){
+  return String(text??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[ch]);
+}
+function learnAnswer(text, reading){
+  const lines=String(text??"").split("\n").filter(Boolean);
+  return lines.map((line,i)=>{
+    const match=line.match(/^([^：:]{1,8}[：:])(.*)$/);
+    const content=match ? `<b>${learnText(match[1])}</b>${learnText(match[2])}` : learnText(line);
+    return `<div class="${i===0&&!reading ? "fc-a" : "fc-detail"}">${content}</div>`;
+  }).join("");
+}
 function renderLearn(){
   const c = learnCards[learnIdx];
-  document.getElementById("learnBar").style.width = ((learnIdx+1)/learnCards.length*100)+"%";
-  // 所有学科都能朗读
-  const speakBtn = `<button class="speakbtn" onclick="speakCard()">🔊 听一听</button>`;
+  const next=document.getElementById("learnNext"), review=document.getElementById("learnReview");
+  if(!c){
+    document.getElementById("learnCard").innerHTML="<div class=\"empty\">这一组暂时没有学习卡</div>";
+    document.getElementById("learnCount").textContent="";
+    document.getElementById("learnBar").style.width="0%";
+    next.textContent="去测一测 →"; review.style.display="none";
+    return;
+  }
+  const count=learnReviewPhase ? learnIdx-learnDeck.length+1 : learnIdx+1;
+  const total=learnReviewPhase ? learnReviewCards.length : learnDeck.length;
+  document.getElementById("learnCount").textContent=learnReviewPhase ? `🔁 再练 ${count} / ${total} 张` : `第 ${count} / ${total} 张 · 想一想再揭晓`;
+  document.getElementById("learnBar").style.width=((Math.min(learnIdx+1,learnDeck.length)/learnDeck.length)*100)+"%";
+  const speakBtn=`<button class="speakbtn" onclick="speakCard()">🔊 ${learnRevealed ? "再听一遍" : "听一听"}</button>`;
   let html;
   if(c.front!==undefined){
-    // 知识卡/课程卡：上面是主题，下面是讲解
-    const lvTag = c.lv ? levelText(c.lv) : "";
+    const lvTag=c.lv ? levelText(c.lv) : "";
     html = `
-      <div class="fc-sub">${c.tag||"知识点"} ${lvTag}</div>
-      <div class="fc-q">${c.front.replace(/\n/g,"<br>")}</div>
-      <div class="fc-a">✅ ${c.back.replace(/\n/g,"<br>")}</div>
+      <div class="fc-sub">${learnText(c.tag||"知识点")} ${learnText(lvTag)}</div>
+      <div class="fc-prompt">${learnRevealed ? "答对了吗？试着讲给家人听" : "先在心里想一想"}</div>
+      <div class="fc-q">${learnText(c.front).replace(/\n/g,"<br>")}</div>
+      ${learnRevealed ? learnAnswer(c.back,curSubject==="reading") : ""}
       ${speakBtn}`;
   } else {
-    // 词条卡：单词/成语在上，意思在下
     html = `
-      <div class="fc-word">${c.word}</div>
-      <div class="fc-sub">${c.say}</div>
-      <div class="fc-mean">${c.mean.replace(/\n/g,"<br>")}</div>
+      ${c.emoji ? `<div class="fc-emoji" aria-hidden="true">${learnText(c.emoji)}</div>` : ""}
+      <div class="fc-prompt">${learnRevealed ? "会读会用了吗？" : "读一读，猜猜意思"}</div>
+      <div class="fc-word">${learnText(c.word)}</div>
+      <div class="fc-sub">${learnText(c.say)}</div>
+      ${learnRevealed ? learnAnswer(c.mean,false) : ""}
       ${speakBtn}`;
   }
   document.getElementById("learnCard").innerHTML = html;
-  document.getElementById("learnNext").textContent =
-    (learnIdx===learnCards.length-1)? "学完啦，去测一测 →" : "下一张 →";
+  next.textContent=learnRevealed ? (learnIdx===learnCards.length-1 ? (!learnReviewPhase&&learnReviewCards.length ? "我会了，复习一下 →" : "我会了，去测一测 →") : "我会了，下一张 →") : "想好了，看答案";
+  review.style.display=learnRevealed&&!learnReviewPhase ? "block" : "none";
 }
 document.getElementById("learnNext").onclick = ()=>{
-  if(learnIdx===learnCards.length-1){ openSetup(); }
-  else { learnIdx++; renderLearn(); }
+  if(!learnCards.length){openSetup();return;}
+  if(!learnRevealed){learnRevealed=true;renderLearn();return;}
+  advanceLearnCard();
 };
+document.getElementById("learnReview").onclick=()=>{
+  if(!learnRevealed||learnReviewPhase) return;
+  learnReviewCards.push(learnCards[learnIdx]);
+  advanceLearnCard();
+};
+function advanceLearnCard(){
+  if(learnIdx<learnCards.length-1){learnIdx++;learnRevealed=false;renderLearn();return;}
+  if(!learnReviewPhase&&learnReviewCards.length){
+    learnCards=learnDeck.concat(learnReviewCards);
+    learnReviewPhase=true; learnIdx=learnDeck.length; learnRevealed=false; renderLearn(); return;
+  }
+  try{localStorage.setItem(learnCursorKey,String((learnStart+learnDeck.length)%learnAvailable));}catch(e){}
+  openSetup();
+}
 
 // 朗读：中文用 zh-CN，英文单词用 en-US
 // 选出设备上最地道的美式英语语音 / 中文语音
@@ -2882,12 +2952,12 @@ function speak(txt, lang){
 function speakCard(){
   const c = learnCards[learnIdx]; if(!c) return;
   if(c.front!==undefined){
-    if(curSubject==="reading") speak(c.back, "zh-CN");                 // 阅读：读整段短文
-    else speak(c.front + "。" + c.back, "zh-CN");                       // 课程卡：读主题+讲解
+    if(curSubject==="reading"&&learnRevealed) speak(c.back, "zh-CN");
+    else speak(c.front+(learnRevealed ? "。"+c.back : ""), "zh-CN");
   } else if(curSubject==="english" && /^[a-zA-Z]/.test(c.word)){
     speak(c.word, "en-US");          // 英语单词
-  } else {                            // 成语、奥数方法卡等：读 词 + 说明
-    speak((c.word||"") + "。" + (c.mean||"").replace("意思：",""), "zh-CN");
+  } else {
+    speak((c.word||"") + (learnRevealed ? "。"+(c.mean||"").replace("意思：","") : ""), "zh-CN");
   }
 }
 // 朗读当前测试题（成语读题目，阅读读短文）
